@@ -185,22 +185,18 @@ export default function RazerBannerTool() {
     saveToHistory(currentWork);
 
     if (draggedFromSlot) {
-      // Dragging from another slot - SWAP if target has banner
-      const targetBanner = currentWork[locale]?.[slot];
+      const targetBanner = currentWork?.[locale]?.[slot];
       
       setCurrentWork(prev => {
         const newWork = { ...prev };
         
         if (targetBanner) {
-          // SWAP: Move target banner to source slot
           newWork[draggedFromSlot.locale][draggedFromSlot.slot] = targetBanner;
         } else {
-          // No swap: Just clear source slot
           delete newWork[draggedFromSlot.locale][draggedFromSlot.slot];
         }
         
-        // Place dragged banner in target slot
-        newWork[locale][slot] = draggedBanner;
+        newWork[locale] = { ...newWork[locale], [slot]: draggedBanner };
         
         return newWork;
       });
@@ -211,7 +207,6 @@ export default function RazerBannerTool() {
         showToast(`✅ Moved ${draggedBanner}`);
       }
     } else {
-      // Dragging from banner list - just place
       setCurrentWork(prev => ({
         ...prev,
         [locale]: { ...prev[locale], [slot]: draggedBanner }
@@ -253,14 +248,20 @@ export default function RazerBannerTool() {
     const values = Object.values(data);
     const duplicates = values.filter((b, i) => values.indexOf(b) !== i);
     const filled = Object.keys(data).length;
-    const ineligible = values.filter(bannerName => {
+    
+    const ineligibleBanners = [];
+    values.forEach(bannerName => {
       const banner = banners.find(b => b.name === bannerName);
-      return banner && !banner.eligibleLocales.includes(locale);
+      if (banner && !banner.eligibleLocales.includes(locale)) {
+        ineligibleBanners.push(bannerName);
+      }
     });
     
-    if (ineligible.length > 0) {
-      const names = ineligible.join(', ');
-      return { status: 'error', message: `🚫 ${names}` };
+    if (ineligibleBanners.length > 0) {
+      return { 
+        status: 'error', 
+        message: `🚫 ${ineligibleBanners.join(', ')}`
+      };
     }
     if (duplicates.length > 0) return { status: 'error', message: `${duplicates.length} dup` };
     if (filled < 9) return { status: 'warning', message: `${filled}/9` };
@@ -370,25 +371,50 @@ export default function RazerBannerTool() {
   const sortedDates = Object.keys(arrangements).sort().reverse();
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '16px' }}>
       {toastMessage && (
-        <div className="fixed top-4 right-4 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-2xl z-50">
+        <div style={{
+          position: 'fixed',
+          top: '16px',
+          right: '16px',
+          backgroundColor: '#111827',
+          color: 'white',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+          zIndex: 50
+        }}>
           {toastMessage}
         </div>
       )}
 
-      <div className="max-w-full mx-auto">
-        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between">
+      <div style={{ maxWidth: '100%', margin: '0 auto' }}>
+        <div style={{
+          background: 'linear-gradient(to right, #059669, #047857)',
+          color: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+          padding: '24px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <h1 className="text-3xl font-bold mb-2">🐍 Razer Banner Manager</h1>
-              <p className="text-green-100">Drag & drop • Auto-replace • Undo/Redo • Find & Replace</p>
+              <h1 style={{ fontSize: '30px', fontWeight: 'bold', marginBottom: '8px' }}>🐍 Razer Banner Manager</h1>
+              <p style={{ color: '#d1fae5' }}>Drag & drop • Swap banners • Undo/Redo • Find & Replace</p>
             </div>
-            <div className="flex gap-3">
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               {Object.keys(arrangements).length > 0 && (
-                <label className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-bold cursor-pointer">
+                <label style={{
+                  backgroundColor: '#ea580c',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'inline-block'
+                }}>
                   📁 Re-import Excel
-                  <input type="file" accept=".xlsx" onChange={handleImportExcel} className="hidden" />
+                  <input type="file" accept=".xlsx" onChange={handleImportExcel} style={{ display: 'none' }} />
                 </label>
               )}
               <button
@@ -398,56 +424,163 @@ export default function RazerBannerTool() {
                     window.location.reload();
                   }
                 }}
-                className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-bold"
+                style={{
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  border: 'none'
+                }}
               >
                 🗑️ Delete All
               </button>
+              <div style={{ fontSize: '14px', color: '#d1fae5' }}>Version 74</div>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-bold mb-3">📁 Import</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '16px' }}>
+            <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>📁 Import</h3>
             {Object.keys(arrangements).length === 0 ? (
-              <label className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 cursor-pointer font-medium">
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '500',
+                justifyContent: 'center'
+              }}>
                 <Upload size={18} /> Import Excel
-                <input type="file" accept=".xlsx" onChange={handleImportExcel} className="hidden" />
+                <input type="file" accept=".xlsx" onChange={handleImportExcel} style={{ display: 'none' }} />
               </label>
             ) : (
-              <select value={viewingTab || ''} onChange={(e) => setViewingTab(e.target.value || null)} className="w-full border-2 rounded px-3 py-2">
+              <select value={viewingTab || ''} onChange={(e) => setViewingTab(e.target.value || null)} style={{
+                width: '100%',
+                border: '2px solid #e5e7eb',
+                borderRadius: '4px',
+                padding: '8px 12px'
+              }}>
                 <option value="">Working (vs {baseline})</option>
                 {sortedDates.map(d => <option key={d} value={d}>View: {d}</option>)}
               </select>
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-bold mb-3">⚡ Actions</h3>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => setModals(prev => ({ ...prev, findReplace: true }))} className="bg-purple-600 text-white px-3 py-2 rounded hover:bg-purple-700 text-sm">
-                <Search size={16} className="inline mr-2" /> Find & Replace
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '16px' }}>
+            <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>⚡ Actions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button onClick={() => setModals(prev => ({ ...prev, findReplace: true }))} style={{
+                backgroundColor: '#9333ea',
+                color: 'white',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Search size={16} /> Find & Replace
               </button>
-              <button onClick={() => setModals(prev => ({ ...prev, duplicate: true }))} disabled={viewingTab} className="bg-orange-600 text-white px-3 py-2 rounded hover:bg-orange-700 text-sm disabled:opacity-50">
-                <RefreshCw size={16} className="inline mr-2" /> Duplicate
+              <button onClick={() => setModals(prev => ({ ...prev, duplicate: true }))} disabled={viewingTab} style={{
+                backgroundColor: '#ea580c',
+                color: 'white',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                border: 'none',
+                cursor: viewingTab ? 'not-allowed' : 'pointer',
+                opacity: viewingTab ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <RefreshCw size={16} /> Duplicate
               </button>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-bold mb-3">📊 Export</h3>
-            <button onClick={exportExcel} className="w-full bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-              <Download size={18} className="inline mr-2" /> Export Excel
+          <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '16px' }}>
+            <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>📊 Export</h3>
+            <button onClick={exportExcel} style={{
+              width: '100%',
+              backgroundColor: '#9333ea',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <Download size={18} /> Export Excel
             </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 mb-6">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
           <button
             onClick={() => setModals(prev => ({ ...prev, addBanner: true }))}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: '500',
+              cursor: 'pointer'
+            }}
           >
             <Plus size={18} /> Add Banner
+          </button>
+          <button
+            onClick={() => setModals(prev => ({ ...prev, findReplace: true }))}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#9333ea',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: '500',
+              cursor: 'pointer'
+            }}
+          >
+            <Search size={18} /> Find & Replace
+          </button>
+          <button
+            onClick={() => setModals(prev => ({ ...prev, duplicate: true }))}
+            disabled={viewingTab}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#ea580c',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: '500',
+              cursor: viewingTab ? 'not-allowed' : 'pointer',
+              opacity: viewingTab ? 0.5 : 1
+            }}
+          >
+            <RefreshCw size={18} /> Duplicate
           </button>
           <button
             onClick={() => {
@@ -458,7 +591,19 @@ export default function RazerBannerTool() {
               }
             }}
             disabled={historyIndex <= 0 || viewingTab}
-            className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium disabled:opacity-50"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#4b5563',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: '500',
+              cursor: (historyIndex <= 0 || viewingTab) ? 'not-allowed' : 'pointer',
+              opacity: (historyIndex <= 0 || viewingTab) ? 0.5 : 1
+            }}
           >
             ↶ Undo
           </button>
@@ -471,162 +616,300 @@ export default function RazerBannerTool() {
               }
             }}
             disabled={historyIndex >= history.length - 1 || viewingTab}
-            className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium disabled:opacity-50"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#4b5563',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: '500',
+              cursor: (historyIndex >= history.length - 1 || viewingTab) ? 'not-allowed' : 'pointer',
+              opacity: (historyIndex >= history.length - 1 || viewingTab) ? 0.5 : 1
+            }}
           >
             ↷ Redo
           </button>
         </div>
 
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-3">
-            <div className="bg-white rounded-lg shadow-lg p-4 sticky top-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-lg">📋 Banners</h2>
-                <button
-                  onClick={() => setModals(prev => ({ ...prev, addBanner: true }))}
-                  className="text-blue-600 hover:text-blue-800"
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '16px' }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            padding: '16px',
+            position: 'sticky',
+            top: '16px',
+            alignSelf: 'start'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h2 style={{ fontWeight: 'bold', fontSize: '18px' }}>📋 Banners</h2>
+              <button
+                onClick={() => setModals(prev => ({ ...prev, addBanner: true }))}
+                style={{
+                  color: '#2563eb',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+            <p style={{ fontSize: '12px', color: '#4b5563', marginBottom: '12px' }}>💡 Drag to reorder or assign</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+              {banners.map((banner, index) => (
+                <div
+                  key={banner.name}
+                  draggable={!viewingTab}
+                  onDragStart={() => {
+                    if (viewingTab) return;
+                    setDraggedBanner(banner.name);
+                    setDraggedBannerIndex(index);
+                    setDraggedFromSlot(null);
+                  }}
+                  onDragEnd={() => setDraggedBannerIndex(null)}
+                  onDragOver={(e) => {
+                    if (viewingTab) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    if (viewingTab) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (draggedBannerIndex !== null && draggedBannerIndex !== index) {
+                      handleBannerReorder(draggedBannerIndex, index);
+                    }
+                    setDraggedBannerIndex(null);
+                  }}
+                  style={{
+                    backgroundColor: '#f0fdf4',
+                    border: '2px solid #86efac',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    cursor: !viewingTab ? 'move' : 'default',
+                    opacity: (viewingTab ? 0.5 : (draggedBannerIndex === index ? 0.5 : 1)),
+                    transition: 'all 0.2s',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!viewingTab) {
+                      e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.backgroundColor = '#dcfce7';
+                      const buttons = e.currentTarget.querySelector('.banner-buttons');
+                      if (buttons) buttons.style.opacity = '1';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.backgroundColor = '#f0fdf4';
+                    const buttons = e.currentTarget.querySelector('.banner-buttons');
+                    if (buttons) buttons.style.opacity = '0';
+                  }}
                 >
-                  <Plus size={20} />
-                </button>
-              </div>
-              <p className="text-xs text-gray-600 mb-3">💡 Drag to reorder or assign</p>
-              <div className="space-y-2 max-h-screen overflow-y-auto">
-                {banners.map((banner, index) => (
-                  <div
-                    key={banner.name}
-                    draggable={!viewingTab}
-                    onDragStart={() => {
-                      if (viewingTab) return;
-                      setDraggedBanner(banner.name);
-                      setDraggedBannerIndex(index);
-                      setDraggedFromSlot(null);
-                    }}
-                    onDragEnd={() => setDraggedBannerIndex(null)}
-                    onDragOver={(e) => {
-                      if (viewingTab) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={(e) => {
-                      if (viewingTab) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (draggedBannerIndex !== null && draggedBannerIndex !== index) {
-                        handleBannerReorder(draggedBannerIndex, index);
-                      }
-                      setDraggedBannerIndex(null);
-                    }}
-                    className={`bg-green-50 border-2 border-green-300 rounded p-3 ${!viewingTab ? 'cursor-move hover:shadow-md hover:bg-green-100' : 'opacity-50'} ${draggedBannerIndex === index ? 'opacity-50' : ''} transition-all group`}
-                  >
-                    <div className="flex items-start justify-between mb-1">
-                      <div className="flex-1">
-                        <div className="font-semibold text-sm">{banner.name}</div>
-                        <div className="text-xs text-gray-600">
-                          {banner.eligibleLocales.length === LOCALES.length ? 'All locales' : `${banner.eligibleLocales.length} locales`}
-                        </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', fontSize: '14px' }}>{banner.name}</div>
+                      <div style={{ fontSize: '12px', color: '#4b5563' }}>
+                        {banner.eligibleLocales.length === LOCALES.length ? 'All locales' : `${banner.eligibleLocales.length} locales`}
                       </div>
-                      {!viewingTab && (
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModals(prev => ({ ...prev, editBanner: banner }));
-                            }}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeBanner(banner.name);
-                            }}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
                     </div>
+                    {!viewingTab && (
+                      <div className="banner-buttons" style={{ display: 'flex', gap: '4px', opacity: 0, transition: 'opacity 0.2s' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModals(prev => ({ ...prev, editBanner: banner }));
+                          }}
+                          style={{
+                            color: '#2563eb',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '2px'
+                          }}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeBanner(banner.name);
+                          }}
+                          style={{
+                            color: '#dc2626',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '2px'
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="col-span-9">
-            <div className="bg-white rounded-lg shadow-lg p-4 overflow-x-auto">
-              <h2 className="font-bold text-lg mb-4">🌍 Grid</h2>
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr>
-                    <th className="border-2 bg-gray-200 p-2 font-bold sticky left-0 z-10">Slot</th>
-                    {LOCALES.map(loc => (
-                      <th key={loc} className="border-2 bg-gray-200 p-2 font-bold min-w-32">{loc}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {SLOTS.map(slot => (
-                    <tr key={slot}>
-                      <td className={`border-2 p-2 font-bold sticky left-0 z-10 ${getSlotZoneStyle(slot)}`}>{slot}</td>
-                      {LOCALES.map(locale => {
-                        const banner = displayData?.[locale]?.[slot];
-                        const isHovering = hoverSlot?.locale === locale && hoverSlot?.slot === slot;
-                        const isEligible = hoverSlot?.eligible;
-                        
-                        return (
-                          <td
-                            key={`${locale}-${slot}`}
-                            onDragOver={(e) => !viewingTab && handleDragOver(e, locale, slot)}
-                            onDragLeave={() => setHoverSlot(null)}
-                            onDrop={(e) => !viewingTab && handleDrop(e, locale, slot)}
-                            className={`border-2 p-2 ${getSlotZoneStyle(slot)} ${isHovering ? (isEligible ? 'ring-4 ring-green-400' : 'ring-4 ring-red-400') : ''}`}
-                          >
-                            {banner ? (
-                              <div
-                                className="relative group"
-                                draggable={!viewingTab}
-                                onDragStart={() => {
-                                  if (viewingTab) return;
-                                  setDraggedBanner(banner);
-                                  setDraggedFromSlot({ locale, slot });
-                                }}
-                              >
-                                <div className={`text-sm cursor-move ${getTextStyle(locale, slot)}`}>{banner}</div>
-                                {!viewingTab && (
-                                  <button onClick={() => clearSlot(locale, slot)} className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-red-600 text-white rounded-full p-1">
-                                    <X size={10} />
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="text-gray-400 text-xs text-center">{isHovering && !isEligible ? '🚫' : 'Drop'}</div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            padding: '16px',
+            overflowX: 'auto'
+          }}>
+            <h2 style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '16px' }}>🌍 Grid</h2>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+              <thead>
+                <tr>
+                  <th style={{
+                    border: '2px solid #e5e7eb',
+                    backgroundColor: '#e5e7eb',
+                    padding: '8px',
+                    fontWeight: 'bold',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 10
+                  }}>Slot</th>
+                  {LOCALES.map(loc => (
+                    <th key={loc} style={{
+                      border: '2px solid #e5e7eb',
+                      backgroundColor: '#e5e7eb',
+                      padding: '8px',
+                      fontWeight: 'bold',
+                      minWidth: '128px'
+                    }}>{loc}</th>
                   ))}
-                  
-                  <tr className="bg-gray-100">
-                    <td className="border-2 p-2 font-bold sticky left-0 z-10">Status</td>
+                </tr>
+              </thead>
+              <tbody>
+                {SLOTS.map(slot => (
+                  <tr key={slot}>
+                    <td style={{
+                      border: '2px solid #e5e7eb',
+                      padding: '8px',
+                      fontWeight: 'bold',
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 10,
+                      backgroundColor: getSlotZoneStyle(slot) === 'bg-yellow-50' ? '#fefce8' : '#f0fdf4'
+                    }}>{slot}</td>
                     {LOCALES.map(locale => {
-                      const status = getLocaleStatus(locale);
+                      const banner = displayData?.[locale]?.[slot];
+                      const isHovering = hoverSlot?.locale === locale && hoverSlot?.slot === slot;
+                      const isEligible = hoverSlot?.eligible;
+                      
                       return (
-                        <td key={locale} className={`border-2 p-2 text-center text-xs font-bold ${
-                          status.status === 'error' ? 'bg-red-100 text-red-700' :
-                          status.status === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {status.message}
+                        <td
+                          key={`${locale}-${slot}`}
+                          onDragOver={(e) => !viewingTab && handleDragOver(e, locale, slot)}
+                          onDragLeave={() => setHoverSlot(null)}
+                          onDrop={(e) => !viewingTab && handleDrop(e, locale, slot)}
+                          style={{
+                            border: '2px solid #e5e7eb',
+                            padding: '8px',
+                            backgroundColor: getSlotZoneStyle(slot) === 'bg-yellow-50' ? '#fefce8' : '#f0fdf4',
+                            boxShadow: isHovering ? (isEligible ? '0 0 0 4px #86efac' : '0 0 0 4px #fca5a5') : 'none'
+                          }}
+                        >
+                          {banner ? (
+                            <div
+                              draggable={!viewingTab}
+                              onDragStart={() => {
+                                if (viewingTab) return;
+                                setDraggedBanner(banner);
+                                setDraggedFromSlot({ locale, slot });
+                              }}
+                              style={{ position: 'relative' }}
+                              onMouseEnter={(e) => {
+                                if (!viewingTab) {
+                                  const btn = e.currentTarget.querySelector('.clear-btn');
+                                  if (btn) btn.style.opacity = '1';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                const btn = e.currentTarget.querySelector('.clear-btn');
+                                if (btn) btn.style.opacity = '0';
+                              }}
+                            >
+                              <div style={{
+                                fontSize: '14px',
+                                cursor: 'move',
+                                color: getTextStyle(locale, slot).includes('red') ? '#dc2626' : 
+                                       getTextStyle(locale, slot).includes('blue') ? '#2563eb' : '#111827',
+                                fontWeight: getTextStyle(locale, slot).includes('font-semibold') ? '600' : 'normal'
+                              }}>{banner}</div>
+                              {!viewingTab && (
+                                <button
+                                  className="clear-btn"
+                                  onClick={() => clearSlot(locale, slot)}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-4px',
+                                    right: '-4px',
+                                    opacity: 0,
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    borderRadius: '50%',
+                                    padding: '4px',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'opacity 0.2s'
+                                  }}
+                                >
+                                  <X size={10} />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ color: '#9ca3af', fontSize: '12px', textAlign: 'center' }}>
+                              {isHovering && !isEligible ? '🚫' : 'Drop'}
+                            </div>
+                          )}
                         </td>
                       );
                     })}
                   </tr>
-                </tbody>
-              </table>
-            </div>
+                ))}
+                
+                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                  <td style={{
+                    border: '2px solid #e5e7eb',
+                    padding: '8px',
+                    fontWeight: 'bold',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 10,
+                    backgroundColor: '#f3f4f6'
+                  }}>Status</td>
+                  {LOCALES.map(locale => {
+                    const status = getLocaleStatus(locale);
+                    return (
+                      <td key={locale} style={{
+                        border: '2px solid #e5e7eb',
+                        padding: '8px',
+                        textAlign: 'center',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        backgroundColor: status.status === 'error' ? '#fee2e2' :
+                                       status.status === 'warning' ? '#fef3c7' : '#dcfce7',
+                        color: status.status === 'error' ? '#b91c1c' :
+                               status.status === 'warning' ? '#a16207' : '#15803d'
+                      }}>
+                        {status.message}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -644,39 +927,94 @@ function AddBannerModal({ onSave, onClose }) {
   const [selectedLocales, setSelectedLocales] = useState(LOCALES);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
-        <h2 className="text-2xl font-bold mb-4">Add New Banner</h2>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Banner Name:</label>
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      padding: '16px'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '24px',
+        maxWidth: '672px',
+        width: '100%'
+      }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Add New Banner</h2>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Banner Name:</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full border-2 rounded p-2"
+            style={{
+              width: '100%',
+              border: '2px solid #e5e7eb',
+              borderRadius: '4px',
+              padding: '8px'
+            }}
             placeholder="e.g. Summer Sale 2026"
           />
         </div>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Eligible Locales:</label>
-          <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Eligible Locales:</label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '8px',
+            maxHeight: '240px',
+            overflowY: 'auto',
+            border: '1px solid #e5e7eb',
+            padding: '8px',
+            borderRadius: '4px'
+          }}>
             {LOCALES.map(locale => (
-              <label key={locale} className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={selectedLocales.includes(locale)} onChange={(e) => {
-                  if (e.target.checked) setSelectedLocales(prev => [...prev, locale]);
-                  else setSelectedLocales(prev => prev.filter(l => l !== locale));
-                }} className="w-4 h-4" />
-                <span className="text-sm">{locale}</span>
+              <label key={locale} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedLocales.includes(locale)}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedLocales(prev => [...prev, locale]);
+                    else setSelectedLocales(prev => prev.filter(l => l !== locale));
+                  }}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px' }}>{locale}</span>
               </label>
             ))}
           </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => {
-            if (!name.trim() || selectedLocales.length === 0) return alert('Fill all fields');
-            onSave(name.trim(), selectedLocales);
-          }} className="flex-1 bg-green-600 text-white py-2 rounded">Add</button>
-          <button onClick={onClose} className="flex-1 bg-gray-300 py-2 rounded">Cancel</button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => {
+              if (!name.trim() || selectedLocales.length === 0) return alert('Fill all fields');
+              onSave(name.trim(), selectedLocales);
+            }}
+            style={{
+              flex: 1,
+              backgroundColor: '#059669',
+              color: 'white',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Add</button>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              backgroundColor: '#d1d5db',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Cancel</button>
         </div>
       </div>
     </div>
@@ -686,29 +1024,79 @@ function AddBannerModal({ onSave, onClose }) {
 function EditBannerModal({ banner, onSave, onClose }) {
   const [selectedLocales, setSelectedLocales] = useState(banner.eligibleLocales);
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
-        <h2 className="text-2xl font-bold mb-4">Edit: {banner.name}</h2>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Eligible Locales:</label>
-          <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      padding: '16px'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '24px',
+        maxWidth: '672px',
+        width: '100%'
+      }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Edit: {banner.name}</h2>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Eligible Locales:</label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '8px',
+            maxHeight: '240px',
+            overflowY: 'auto',
+            border: '1px solid #e5e7eb',
+            padding: '8px',
+            borderRadius: '4px'
+          }}>
             {LOCALES.map(locale => (
-              <label key={locale} className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={selectedLocales.includes(locale)} onChange={(e) => {
-                  if (e.target.checked) setSelectedLocales(prev => [...prev, locale]);
-                  else setSelectedLocales(prev => prev.filter(l => l !== locale));
-                }} className="w-4 h-4" />
-                <span className="text-sm">{locale}</span>
+              <label key={locale} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedLocales.includes(locale)}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedLocales(prev => [...prev, locale]);
+                    else setSelectedLocales(prev => prev.filter(l => l !== locale));
+                  }}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px' }}>{locale}</span>
               </label>
             ))}
           </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => {
-            if (selectedLocales.length === 0) return alert('Select at least one locale');
-            onSave(banner.name, selectedLocales);
-          }} className="flex-1 bg-green-600 text-white py-2 rounded">Save</button>
-          <button onClick={onClose} className="flex-1 bg-gray-300 py-2 rounded">Cancel</button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => {
+              if (selectedLocales.length === 0) return alert('Select at least one locale');
+              onSave(banner.name, selectedLocales);
+            }}
+            style={{
+              flex: 1,
+              backgroundColor: '#059669',
+              color: 'white',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Save</button>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              backgroundColor: '#d1d5db',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Cancel</button>
         </div>
       </div>
     </div>
@@ -720,34 +1108,106 @@ function FindReplaceModal({ onReplace, onClose }) {
   const [replace, setReplace] = useState('');
   const [selectedLocales, setSelectedLocales] = useState(LOCALES);
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
-        <h2 className="text-2xl font-bold mb-4">Find & Replace</h2>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Find:</label>
-          <input type="text" value={find} onChange={(e) => setFind(e.target.value)} className="w-full border-2 rounded p-2" placeholder="e.g. New Year Campaign" />
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      padding: '16px'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '24px',
+        maxWidth: '672px',
+        width: '100%'
+      }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Find & Replace</h2>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Find:</label>
+          <input
+            type="text"
+            value={find}
+            onChange={(e) => setFind(e.target.value)}
+            style={{
+              width: '100%',
+              border: '2px solid #e5e7eb',
+              borderRadius: '4px',
+              padding: '8px'
+            }}
+            placeholder="e.g. New Year Campaign"
+          />
         </div>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Replace:</label>
-          <input type="text" value={replace} onChange={(e) => setReplace(e.target.value)} className="w-full border-2 rounded p-2" placeholder="e.g. 2XKO (empty = remove)" />
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Replace:</label>
+          <input
+            type="text"
+            value={replace}
+            onChange={(e) => setReplace(e.target.value)}
+            style={{
+              width: '100%',
+              border: '2px solid #e5e7eb',
+              borderRadius: '4px',
+              padding: '8px'
+            }}
+            placeholder="e.g. 2XKO (empty = remove)"
+          />
         </div>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">Locales:</label>
-          <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto border p-2 rounded">
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Locales:</label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '8px',
+            maxHeight: '160px',
+            overflowY: 'auto',
+            border: '1px solid #e5e7eb',
+            padding: '8px',
+            borderRadius: '4px'
+          }}>
             {LOCALES.map(locale => (
-              <label key={locale} className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={selectedLocales.includes(locale)} onChange={(e) => {
-                  if (e.target.checked) setSelectedLocales(prev => [...prev, locale]);
-                  else setSelectedLocales(prev => prev.filter(l => l !== locale));
-                }} className="w-4 h-4" />
-                <span className="text-sm">{locale}</span>
+              <label key={locale} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedLocales.includes(locale)}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedLocales(prev => [...prev, locale]);
+                    else setSelectedLocales(prev => prev.filter(l => l !== locale));
+                  }}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px' }}>{locale}</span>
               </label>
             ))}
           </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => onReplace(find, replace, selectedLocales)} className="flex-1 bg-purple-600 text-white py-2 rounded">Replace All</button>
-          <button onClick={onClose} className="flex-1 bg-gray-300 py-2 rounded">Cancel</button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => onReplace(find, replace, selectedLocales)}
+            style={{
+              flex: 1,
+              backgroundColor: '#9333ea',
+              color: 'white',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Replace All</button>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              backgroundColor: '#d1d5db',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Cancel</button>
         </div>
       </div>
     </div>
@@ -758,35 +1218,94 @@ function DuplicateModal({ currentWork, onDuplicate, onClose }) {
   const [sourceLocale, setSourceLocale] = useState('US');
   const [targetLocales, setTargetLocales] = useState([]);
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
-        <h2 className="text-2xl font-bold mb-4">Duplicate Arrangement</h2>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">From:</label>
-          <select value={sourceLocale} onChange={(e) => setSourceLocale(e.target.value)} className="w-full border-2 rounded p-2">
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      padding: '16px'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '24px',
+        maxWidth: '672px',
+        width: '100%'
+      }}>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Duplicate Arrangement</h2>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>From:</label>
+          <select
+            value={sourceLocale}
+            onChange={(e) => setSourceLocale(e.target.value)}
+            style={{
+              width: '100%',
+              border: '2px solid #e5e7eb',
+              borderRadius: '4px',
+              padding: '8px'
+            }}
+          >
             {LOCALES.map(loc => <option key={loc} value={loc}>{loc}</option>)}
           </select>
         </div>
-        <div className="mb-4">
-          <label className="block font-semibold mb-2">To:</label>
-          <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto border p-2 rounded">
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>To:</label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '8px',
+            maxHeight: '240px',
+            overflowY: 'auto',
+            border: '1px solid #e5e7eb',
+            padding: '8px',
+            borderRadius: '4px'
+          }}>
             {LOCALES.filter(l => l !== sourceLocale).map(locale => (
-              <label key={locale} className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={targetLocales.includes(locale)} onChange={(e) => {
-                  if (e.target.checked) setTargetLocales(prev => [...prev, locale]);
-                  else setTargetLocales(prev => prev.filter(l => l !== locale));
-                }} className="w-4 h-4" />
-                <span className="text-sm">{locale}</span>
+              <label key={locale} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={targetLocales.includes(locale)}
+                  onChange={(e) => {
+                    if (e.target.checked) setTargetLocales(prev => [...prev, locale]);
+                    else setTargetLocales(prev => prev.filter(l => l !== locale));
+                  }}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '14px' }}>{locale}</span>
               </label>
             ))}
           </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => {
-            if (targetLocales.length === 0) return alert('Select target locales');
-            onDuplicate(sourceLocale, targetLocales);
-          }} className="flex-1 bg-blue-600 text-white py-2 rounded">Duplicate</button>
-          <button onClick={onClose} className="flex-1 bg-gray-300 py-2 rounded">Cancel</button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => {
+              if (targetLocales.length === 0) return alert('Select target locales');
+              onDuplicate(sourceLocale, targetLocales);
+            }}
+            style={{
+              flex: 1,
+              backgroundColor: '#2563eb',
+              color: 'white',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Duplicate</button>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              backgroundColor: '#d1d5db',
+              padding: '8px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >Cancel</button>
         </div>
       </div>
     </div>
