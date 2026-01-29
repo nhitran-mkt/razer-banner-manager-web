@@ -188,15 +188,22 @@ export default function RazerBannerTool() {
       const targetBanner = currentWork?.[locale]?.[slot];
       
       setCurrentWork(prev => {
-        const newWork = { ...prev };
+        const newWork = JSON.parse(JSON.stringify(prev)); // Deep clone to avoid mutation issues
         
         if (targetBanner) {
+          // SWAP: Put target banner into source slot
+          if (!newWork[draggedFromSlot.locale]) newWork[draggedFromSlot.locale] = {};
           newWork[draggedFromSlot.locale][draggedFromSlot.slot] = targetBanner;
         } else {
-          delete newWork[draggedFromSlot.locale][draggedFromSlot.slot];
+          // No target banner: just clear source slot
+          if (newWork[draggedFromSlot.locale]) {
+            delete newWork[draggedFromSlot.locale][draggedFromSlot.slot];
+          }
         }
         
-        newWork[locale] = { ...newWork[locale], [slot]: draggedBanner };
+        // Put dragged banner into target slot
+        if (!newWork[locale]) newWork[locale] = {};
+        newWork[locale][slot] = draggedBanner;
         
         return newWork;
       });
@@ -207,10 +214,13 @@ export default function RazerBannerTool() {
         showToast(`✅ Moved ${draggedBanner}`);
       }
     } else {
-      setCurrentWork(prev => ({
-        ...prev,
-        [locale]: { ...prev[locale], [slot]: draggedBanner }
-      }));
+      // Dragging from banner list - REPLACE target
+      setCurrentWork(prev => {
+        const newWork = JSON.parse(JSON.stringify(prev));
+        if (!newWork[locale]) newWork[locale] = {};
+        newWork[locale][slot] = draggedBanner;
+        return newWork;
+      });
       showToast(`✅ Placed ${draggedBanner}`);
     }
     
@@ -353,16 +363,59 @@ export default function RazerBannerTool() {
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
+    
     Object.keys(arrangements).sort().forEach(date => {
       const arr = arrangements[date];
+      
+      // Create worksheet data with headers
       const wsData = [['Position', ...LOCALES]];
+      
+      // Add slot rows
       SLOTS.forEach(slot => {
         const row = [slot];
-        LOCALES.forEach(locale => row.push(arr?.[locale]?.[slot] || ''));
+        LOCALES.forEach(locale => {
+          const bannerName = arr?.[locale]?.[slot] || '';
+          row.push(bannerName);
+        });
         wsData.push(row);
       });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), date);
+      
+      // Add Status row
+      const statusRow = ['Status'];
+      LOCALES.forEach(locale => {
+        const data = arr[locale] || {};
+        const values = Object.values(data);
+        const duplicates = values.filter((b, i) => values.indexOf(b) !== i);
+        const filled = Object.keys(data).length;
+        const ineligible = values.filter(bannerName => {
+          const banner = banners.find(b => b.name === bannerName);
+          return banner && !banner.eligibleLocales.includes(locale);
+        });
+        
+        if (ineligible.length > 0) {
+          statusRow.push(`ERROR: ${ineligible.join(', ')}`);
+        } else if (duplicates.length > 0) {
+          statusRow.push(`${duplicates.length} duplicates`);
+        } else if (filled < 9) {
+          statusRow.push(`${filled}/9 filled`);
+        } else {
+          statusRow.push('Complete');
+        }
+      });
+      wsData.push(statusRow);
+      
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      
+      // Set column widths
+      const colWidths = [{ wch: 12 }]; // Position column
+      LOCALES.forEach(() => colWidths.push({ wch: 20 })); // Locale columns
+      ws['!cols'] = colWidths;
+      
+      XLSX.utils.book_append_sheet(wb, ws, date);
     });
+    
+    // Write file
     XLSX.writeFile(wb, `Razer_${new Date().toISOString().split('T')[0]}.xlsx`);
     showToast('✅ Exported!');
   };
@@ -371,18 +424,24 @@ export default function RazerBannerTool() {
   const sortedDates = Object.keys(arrangements).sort().reverse();
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '16px' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', padding: '16px' }}>
       {toastMessage && (
         <div style={{
           position: 'fixed',
-          top: '16px',
-          right: '16px',
+          bottom: '32px',
+          left: '50%',
+          transform: 'translateX(-50%)',
           backgroundColor: '#111827',
           color: 'white',
-          padding: '12px 24px',
-          borderRadius: '8px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-          zIndex: 50
+          padding: '16px 32px',
+          borderRadius: '12px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)',
+          zIndex: 9999,
+          fontSize: '16px',
+          fontWeight: '600',
+          minWidth: '200px',
+          textAlign: 'center',
+          animation: 'fadeIn 0.2s ease-in-out'
         }}>
           {toastMessage}
         </div>
@@ -390,7 +449,7 @@ export default function RazerBannerTool() {
 
       <div style={{ maxWidth: '100%', margin: '0 auto' }}>
         <div style={{
-          background: 'linear-gradient(to right, #059669, #047857)',
+          background: 'linear-gradient(to right, #065f46, #064e3b)',
           color: 'white',
           borderRadius: '8px',
           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
@@ -405,7 +464,7 @@ export default function RazerBannerTool() {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               {Object.keys(arrangements).length > 0 && (
                 <label style={{
-                  backgroundColor: '#ea580c',
+                  backgroundColor: '#047857',
                   color: 'white',
                   padding: '12px 24px',
                   borderRadius: '8px',
@@ -425,7 +484,7 @@ export default function RazerBannerTool() {
                   }
                 }}
                 style={{
-                  backgroundColor: '#dc2626',
+                  backgroundColor: '#1f2937',
                   color: 'white',
                   padding: '12px 24px',
                   borderRadius: '8px',
@@ -436,7 +495,6 @@ export default function RazerBannerTool() {
               >
                 🗑️ Delete All
               </button>
-              <div style={{ fontSize: '14px', color: '#d1fae5' }}>Version 74</div>
             </div>
           </div>
         </div>
@@ -449,7 +507,7 @@ export default function RazerBannerTool() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: '#2563eb',
+                backgroundColor: '#047857',
                 color: 'white',
                 padding: '8px 16px',
                 borderRadius: '8px',
@@ -477,7 +535,7 @@ export default function RazerBannerTool() {
             <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>⚡ Actions</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button onClick={() => setModals(prev => ({ ...prev, findReplace: true }))} style={{
-                backgroundColor: '#9333ea',
+                backgroundColor: '#047857',
                 color: 'white',
                 padding: '8px 12px',
                 borderRadius: '4px',
@@ -491,7 +549,7 @@ export default function RazerBannerTool() {
                 <Search size={16} /> Find & Replace
               </button>
               <button onClick={() => setModals(prev => ({ ...prev, duplicate: true }))} disabled={viewingTab} style={{
-                backgroundColor: '#ea580c',
+                backgroundColor: '#047857',
                 color: 'white',
                 padding: '8px 12px',
                 borderRadius: '4px',
@@ -512,7 +570,7 @@ export default function RazerBannerTool() {
             <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>📊 Export</h3>
             <button onClick={exportExcel} style={{
               width: '100%',
-              backgroundColor: '#9333ea',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px 16px',
               borderRadius: '4px',
@@ -535,7 +593,7 @@ export default function RazerBannerTool() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: '#2563eb',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px 16px',
               borderRadius: '8px',
@@ -552,7 +610,7 @@ export default function RazerBannerTool() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: '#9333ea',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px 16px',
               borderRadius: '8px',
@@ -570,7 +628,7 @@ export default function RazerBannerTool() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: '#ea580c',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px 16px',
               borderRadius: '8px',
@@ -595,7 +653,7 @@ export default function RazerBannerTool() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: '#4b5563',
+              backgroundColor: '#1f2937',
               color: 'white',
               padding: '8px 16px',
               borderRadius: '8px',
@@ -620,7 +678,7 @@ export default function RazerBannerTool() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              backgroundColor: '#4b5563',
+              backgroundColor: '#1f2937',
               color: 'white',
               padding: '8px 16px',
               borderRadius: '8px',
@@ -649,7 +707,7 @@ export default function RazerBannerTool() {
               <button
                 onClick={() => setModals(prev => ({ ...prev, addBanner: true }))}
                 style={{
-                  color: '#2563eb',
+                  color: '#047857',
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
@@ -726,7 +784,7 @@ export default function RazerBannerTool() {
                             setModals(prev => ({ ...prev, editBanner: banner }));
                           }}
                           style={{
-                            color: '#2563eb',
+                            color: '#047857',
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
@@ -741,7 +799,7 @@ export default function RazerBannerTool() {
                             removeBanner(banner.name);
                           }}
                           style={{
-                            color: '#dc2626',
+                            color: '#1f2937',
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
@@ -916,7 +974,7 @@ export default function RazerBannerTool() {
 
       {modals.addBanner && <AddBannerModal onSave={addNewBanner} onClose={() => setModals(prev => ({ ...prev, addBanner: false }))} />}
       {modals.editBanner && <EditBannerModal banner={modals.editBanner} onSave={updateBannerLocales} onClose={() => setModals(prev => ({ ...prev, editBanner: null }))} />}
-      {modals.findReplace && <FindReplaceModal onReplace={findReplace} onClose={() => setModals(prev => ({ ...prev, findReplace: false }))} />}
+      {modals.findReplace && <FindReplaceModal banners={banners} onReplace={findReplace} onClose={() => setModals(prev => ({ ...prev, findReplace: false }))} />}
       {modals.duplicate && <DuplicateModal currentWork={currentWork} onDuplicate={duplicateArrangement} onClose={() => setModals(prev => ({ ...prev, duplicate: false }))} />}
     </div>
   );
@@ -996,7 +1054,7 @@ function AddBannerModal({ onSave, onClose }) {
             }}
             style={{
               flex: 1,
-              backgroundColor: '#059669',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px',
               borderRadius: '4px',
@@ -1008,7 +1066,8 @@ function AddBannerModal({ onSave, onClose }) {
             onClick={onClose}
             style={{
               flex: 1,
-              backgroundColor: '#d1d5db',
+              backgroundColor: '#6b7280',
+              color: 'white',
               padding: '8px',
               borderRadius: '4px',
               border: 'none',
@@ -1043,7 +1102,39 @@ function EditBannerModal({ banner, onSave, onClose }) {
       }}>
         <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Edit: {banner.name}</h2>
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Eligible Locales:</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label style={{ fontWeight: '600' }}>Eligible Locales:</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setSelectedLocales(LOCALES)}
+                style={{
+                  fontSize: '12px',
+                  padding: '4px 12px',
+                  backgroundColor: '#047857',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Select All
+              </button>
+              <button
+                onClick={() => setSelectedLocales([])}
+                style={{
+                  fontSize: '12px',
+                  padding: '4px 12px',
+                  backgroundColor: '#1f2937',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Deselect All
+              </button>
+            </div>
+          </div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1078,7 +1169,7 @@ function EditBannerModal({ banner, onSave, onClose }) {
             }}
             style={{
               flex: 1,
-              backgroundColor: '#059669',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px',
               borderRadius: '4px',
@@ -1090,7 +1181,8 @@ function EditBannerModal({ banner, onSave, onClose }) {
             onClick={onClose}
             style={{
               flex: 1,
-              backgroundColor: '#d1d5db',
+              backgroundColor: '#6b7280',
+              color: 'white',
               padding: '8px',
               borderRadius: '4px',
               border: 'none',
@@ -1103,7 +1195,7 @@ function EditBannerModal({ banner, onSave, onClose }) {
   );
 }
 
-function FindReplaceModal({ onReplace, onClose }) {
+function FindReplaceModal({ banners, onReplace, onClose }) {
   const [find, setFind] = useState('');
   const [replace, setReplace] = useState('');
   const [selectedLocales, setSelectedLocales] = useState(LOCALES);
@@ -1128,8 +1220,7 @@ function FindReplaceModal({ onReplace, onClose }) {
         <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Find & Replace</h2>
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Find:</label>
-          <input
-            type="text"
+          <select
             value={find}
             onChange={(e) => setFind(e.target.value)}
             style={{
@@ -1138,8 +1229,12 @@ function FindReplaceModal({ onReplace, onClose }) {
               borderRadius: '4px',
               padding: '8px'
             }}
-            placeholder="e.g. New Year Campaign"
-          />
+          >
+            <option value="">-- Select a banner --</option>
+            {banners.map(banner => (
+              <option key={banner.name} value={banner.name}>{banner.name}</option>
+            ))}
+          </select>
         </div>
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Replace:</label>
@@ -1189,7 +1284,7 @@ function FindReplaceModal({ onReplace, onClose }) {
             onClick={() => onReplace(find, replace, selectedLocales)}
             style={{
               flex: 1,
-              backgroundColor: '#9333ea',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px',
               borderRadius: '4px',
@@ -1201,7 +1296,8 @@ function FindReplaceModal({ onReplace, onClose }) {
             onClick={onClose}
             style={{
               flex: 1,
-              backgroundColor: '#d1d5db',
+              backgroundColor: '#6b7280',
+              color: 'white',
               padding: '8px',
               borderRadius: '4px',
               border: 'none',
@@ -1287,7 +1383,7 @@ function DuplicateModal({ currentWork, onDuplicate, onClose }) {
             }}
             style={{
               flex: 1,
-              backgroundColor: '#2563eb',
+              backgroundColor: '#047857',
               color: 'white',
               padding: '8px',
               borderRadius: '4px',
@@ -1299,7 +1395,8 @@ function DuplicateModal({ currentWork, onDuplicate, onClose }) {
             onClick={onClose}
             style={{
               flex: 1,
-              backgroundColor: '#d1d5db',
+              backgroundColor: '#6b7280',
+              color: 'white',
               padding: '8px',
               borderRadius: '4px',
               border: 'none',
