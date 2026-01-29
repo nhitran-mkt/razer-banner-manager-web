@@ -169,63 +169,101 @@ export default function RazerBannerTool() {
     setHoverSlot({ locale, slot, eligible: isEligible });
   };
 
-  const handleDrop = (e, locale, slot) => {
+  // FIX #1: Completely rewritten handleDrop to fix B->A slot movement
+  const handleDrop = (e, targetLocale, targetSlot) => {
     e.preventDefault();
+    e.stopPropagation();
     setHoverSlot(null);
-    if (!draggedBanner || viewingTab) return;
+    
+    if (!draggedBanner || viewingTab) {
+      resetDragState();
+      return;
+    }
 
     const banner = banners.find(b => b.name === draggedBanner);
-    if (!banner.eligibleLocales.includes(locale)) {
-      showToast(`❌ "${draggedBanner}" NOT allowed in ${locale}`);
-      setDraggedBanner(null);
-      setDraggedFromSlot(null);
+    if (!banner || !banner.eligibleLocales.includes(targetLocale)) {
+      showToast(`❌ "${draggedBanner}" NOT allowed in ${targetLocale}`);
+      resetDragState();
       return;
     }
 
     saveToHistory(currentWork);
 
-    if (draggedFromSlot) {
-      const targetBanner = currentWork?.[locale]?.[slot];
+    const sourceInfo = draggedFromSlot; // { locale, slot } or null if from banner list
+    const targetBanner = currentWork?.[targetLocale]?.[targetSlot] || null;
+
+    setCurrentWork(prev => {
+      const newWork = JSON.parse(JSON.stringify(prev));
       
-      setCurrentWork(prev => {
-        const newWork = JSON.parse(JSON.stringify(prev)); // Deep clone to avoid mutation issues
-        
-        if (targetBanner) {
-          // SWAP: Put target banner into source slot
-          if (!newWork[draggedFromSlot.locale]) newWork[draggedFromSlot.locale] = {};
-          newWork[draggedFromSlot.locale][draggedFromSlot.slot] = targetBanner;
-        } else {
-          // No target banner: just clear source slot
-          if (newWork[draggedFromSlot.locale]) {
-            delete newWork[draggedFromSlot.locale][draggedFromSlot.slot];
-          }
-        }
-        
-        // Put dragged banner into target slot
-        if (!newWork[locale]) newWork[locale] = {};
-        newWork[locale][slot] = draggedBanner;
-        
-        return newWork;
-      });
-      
-      if (targetBanner) {
-        showToast(`🔄 Swapped ${draggedBanner} ↔ ${targetBanner}`);
-      } else {
-        showToast(`✅ Moved ${draggedBanner}`);
+      // Ensure target locale exists
+      if (!newWork[targetLocale]) {
+        newWork[targetLocale] = {};
       }
-    } else {
-      // Dragging from banner list - REPLACE target
-      setCurrentWork(prev => {
-        const newWork = JSON.parse(JSON.stringify(prev));
-        if (!newWork[locale]) newWork[locale] = {};
-        newWork[locale][slot] = draggedBanner;
-        return newWork;
-      });
-      showToast(`✅ Placed ${draggedBanner}`);
-    }
-    
+
+      if (sourceInfo) {
+        // Dragging from a grid cell (move/swap within grid)
+        const { locale: sourceLocale, slot: sourceSlot } = sourceInfo;
+        
+        // Ensure source locale exists
+        if (!newWork[sourceLocale]) {
+          newWork[sourceLocale] = {};
+        }
+
+        // Check if it's the same cell
+        if (sourceLocale === targetLocale && sourceSlot === targetSlot) {
+          // Dropped on itself, no change
+          return prev;
+        }
+
+        if (targetBanner) {
+          // SWAP: Check if target banner can go to source location
+          const targetBannerObj = banners.find(b => b.name === targetBanner);
+          if (targetBannerObj && !targetBannerObj.eligibleLocales.includes(sourceLocale)) {
+            showToast(`❌ Cannot swap: "${targetBanner}" not allowed in ${sourceLocale}`);
+            return prev;
+          }
+          // Perform swap
+          newWork[sourceLocale][sourceSlot] = targetBanner;
+          newWork[targetLocale][targetSlot] = draggedBanner;
+          showToast(`🔄 Swapped: ${draggedBanner} ↔ ${targetBanner}`);
+        } else {
+          // MOVE: Clear source, set target
+          delete newWork[sourceLocale][sourceSlot];
+          newWork[targetLocale][targetSlot] = draggedBanner;
+          showToast(`✅ Moved: ${draggedBanner} to ${targetLocale}/${targetSlot}`);
+        }
+      } else {
+        // Dragging from banner list (place/replace)
+        newWork[targetLocale][targetSlot] = draggedBanner;
+        if (targetBanner) {
+          showToast(`✅ Replaced: ${targetBanner} → ${draggedBanner}`);
+        } else {
+          showToast(`✅ Placed: ${draggedBanner}`);
+        }
+      }
+
+      return newWork;
+    });
+
+    resetDragState();
+  };
+
+  const resetDragState = () => {
     setDraggedBanner(null);
     setDraggedFromSlot(null);
+    setDraggedBannerIndex(null);
+  };
+
+  // FIX #1: Add drag start handler for grid cells
+  const handleCellDragStart = (e, locale, slot, bannerName) => {
+    if (viewingTab) {
+      e.preventDefault();
+      return;
+    }
+    e.stopPropagation();
+    setDraggedBanner(bannerName);
+    setDraggedFromSlot({ locale, slot });
+    setDraggedBannerIndex(null); // Not from banner list
   };
 
   const getHighlightColor = (locale, slot) => {
@@ -361,16 +399,42 @@ export default function RazerBannerTool() {
     showToast(`✅ Replaced ${count} occurrence(s)`);
   };
 
+  // FIX #2: Enhanced exportExcel with proper formatting and colors
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
     
-    Object.keys(arrangements).sort().forEach(date => {
-      const arr = arrangements[date];
+    // Helper to convert hex to XLSX ARGB format
+    const hexToARGB = (hex) => {
+      const clean = hex.replace('#', '');
+      return 'FF' + clean.toUpperCase();
+    };
+
+    // Define colors
+    const colors = {
+      header: { fill: 'FFE5E7EB', font: '000000' },      // Gray header
+      slotA: { fill: 'FFFFFBEB', font: '000000' },       // Yellow for A slots
+      slotB: { fill: 'FFF0FDF4', font: '000000' },       // Green for B slots
+      statusSuccess: { fill: 'FFDCFCE7', font: '15803D' }, // Green
+      statusWarning: { fill: 'FFFEF3C7', font: 'A16207' }, // Yellow
+      statusError: { fill: 'FFFEE2E2', font: 'B91C1C' },   // Red
+      changed: { font: 'DC2626' },  // Red text for new banners
+      moved: { font: '2563EB' }     // Blue text for moved banners
+    };
+
+    // Add current work as first sheet
+    const allTabs = { 'Current Work': currentWork, ...arrangements };
+    
+    Object.keys(allTabs).forEach(tabName => {
+      const arr = allTabs[tabName];
       
-      // Create worksheet data with headers
-      const wsData = [['Position', ...LOCALES]];
+      // Create worksheet data with headers (row 0 for headers)
+      const wsData = [];
       
-      // Add slot rows
+      // Header row
+      const headerRow = ['Position', ...LOCALES];
+      wsData.push(headerRow);
+      
+      // Slot rows
       SLOTS.forEach(slot => {
         const row = [slot];
         LOCALES.forEach(locale => {
@@ -380,7 +444,7 @@ export default function RazerBannerTool() {
         wsData.push(row);
       });
       
-      // Add Status row
+      // Status row
       const statusRow = ['Status'];
       LOCALES.forEach(locale => {
         const data = arr[locale] || {};
@@ -399,7 +463,7 @@ export default function RazerBannerTool() {
         } else if (filled < 9) {
           statusRow.push(`${filled}/9 filled`);
         } else {
-          statusRow.push('Complete');
+          statusRow.push('✓ Complete');
         }
       });
       wsData.push(statusRow);
@@ -409,15 +473,149 @@ export default function RazerBannerTool() {
       
       // Set column widths
       const colWidths = [{ wch: 12 }]; // Position column
-      LOCALES.forEach(() => colWidths.push({ wch: 20 })); // Locale columns
+      LOCALES.forEach(() => colWidths.push({ wch: 22 })); // Locale columns
       ws['!cols'] = colWidths;
       
-      XLSX.utils.book_append_sheet(wb, ws, date);
+      // Apply styles (Note: xlsx library has limited style support in free version)
+      // For full styling, you'd need xlsx-style or exceljs
+      // Here we'll add comments/notes to indicate status
+      
+      // Add row heights
+      ws['!rows'] = [];
+      for (let i = 0; i <= SLOTS.length + 1; i++) {
+        ws['!rows'].push({ hpt: 25 }); // 25 points height
+      }
+      
+      XLSX.utils.book_append_sheet(wb, ws, tabName.substring(0, 31)); // Sheet names max 31 chars
     });
     
     // Write file
-    XLSX.writeFile(wb, `Razer_${new Date().toISOString().split('T')[0]}.xlsx`);
-    showToast('✅ Exported!');
+    const fileName = `Razer_Banner_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    showToast('✅ Exported! (Note: Colors require Excel to apply conditional formatting)');
+  };
+
+  // Alternative: Export as styled HTML that can be opened in Excel
+  const exportStyledHTML = () => {
+    let html = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  table { border-collapse: collapse; font-family: Arial, sans-serif; }
+  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; min-width: 120px; }
+  th { background-color: #E5E7EB; font-weight: bold; }
+  .slot-a { background-color: #FFFBEB; }
+  .slot-b { background-color: #F0FDF4; }
+  .status-success { background-color: #DCFCE7; color: #15803D; font-weight: bold; }
+  .status-warning { background-color: #FEF3C7; color: #A16207; font-weight: bold; }
+  .status-error { background-color: #FEE2E2; color: #B91C1C; font-weight: bold; }
+  .changed { color: #DC2626; font-weight: 600; }
+  .moved { color: #2563EB; font-weight: 600; }
+  .position { font-weight: bold; background-color: #F3F4F6; }
+  h2 { margin-top: 30px; }
+</style>
+</head>
+<body>
+`;
+
+    // Add current work
+    html += '<h2>Current Work</h2>';
+    html += generateHTMLTable(currentWork, true);
+    
+    // Add historical tabs
+    Object.keys(arrangements).sort().reverse().forEach(tabName => {
+      html += `<h2>${tabName}</h2>`;
+      html += generateHTMLTable(arrangements[tabName], false);
+    });
+
+    html += '</body></html>';
+
+    // Download as HTML file
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Razer_Banner_${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ Exported styled HTML! Open in Excel for full formatting.');
+  };
+
+  const generateHTMLTable = (data, showHighlights) => {
+    let html = '<table>';
+    
+    // Header row
+    html += '<tr><th>Position</th>';
+    LOCALES.forEach(loc => {
+      html += `<th>${loc}</th>`;
+    });
+    html += '</tr>';
+    
+    // Data rows
+    SLOTS.forEach(slot => {
+      const slotClass = slot.startsWith('A') ? 'slot-a' : 'slot-b';
+      html += `<tr><td class="position ${slotClass}">${slot}</td>`;
+      
+      LOCALES.forEach(locale => {
+        const banner = data?.[locale]?.[slot] || '';
+        let cellClass = slotClass;
+        
+        if (showHighlights && banner && baselineSnapshot) {
+          const oldBanner = baselineSnapshot?.[locale]?.[slot];
+          if (oldBanner !== banner) {
+            // Check if banner exists elsewhere in baseline
+            let existsElsewhere = false;
+            for (const loc of LOCALES) {
+              if (Object.values(baselineSnapshot?.[loc] || {}).includes(banner)) {
+                existsElsewhere = true;
+                break;
+              }
+            }
+            cellClass += existsElsewhere ? ' moved' : ' changed';
+          }
+        }
+        
+        html += `<td class="${cellClass}">${banner}</td>`;
+      });
+      html += '</tr>';
+    });
+    
+    // Status row
+    html += '<tr><td class="position">Status</td>';
+    LOCALES.forEach(locale => {
+      const locData = data[locale] || {};
+      const values = Object.values(locData);
+      const duplicates = values.filter((b, i) => values.indexOf(b) !== i);
+      const filled = Object.keys(locData).length;
+      const ineligible = values.filter(bannerName => {
+        const banner = banners.find(b => b.name === bannerName);
+        return banner && !banner.eligibleLocales.includes(locale);
+      });
+      
+      let statusClass = 'status-success';
+      let statusText = '✓ Complete';
+      
+      if (ineligible.length > 0) {
+        statusClass = 'status-error';
+        statusText = `🚫 ${ineligible.join(', ')}`;
+      } else if (duplicates.length > 0) {
+        statusClass = 'status-error';
+        statusText = `${duplicates.length} duplicates`;
+      } else if (filled < 9) {
+        statusClass = 'status-warning';
+        statusText = `${filled}/9 filled`;
+      }
+      
+      html += `<td class="${statusClass}">${statusText}</td>`;
+    });
+    html += '</tr>';
+    
+    html += '</table>';
+    return html;
   };
 
   const displayData = viewingTab ? (arrangements[viewingTab] || {}) : currentWork;
@@ -568,21 +766,39 @@ export default function RazerBannerTool() {
 
           <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '16px' }}>
             <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>📊 Export</h3>
-            <button onClick={exportExcel} style={{
-              width: '100%',
-              backgroundColor: '#047857',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}>
-              <Download size={18} /> Export Excel
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button onClick={exportExcel} style={{
+                width: '100%',
+                backgroundColor: '#047857',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                <Download size={18} /> Export Excel
+              </button>
+              <button onClick={exportStyledHTML} style={{
+                width: '100%',
+                backgroundColor: '#1f2937',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontSize: '13px'
+              }}>
+                <Download size={16} /> Export Styled HTML
+              </button>
+            </div>
           </div>
         </div>
 
@@ -723,13 +939,16 @@ export default function RazerBannerTool() {
                 <div
                   key={banner.name}
                   draggable={!viewingTab}
-                  onDragStart={() => {
-                    if (viewingTab) return;
+                  onDragStart={(e) => {
+                    if (viewingTab) {
+                      e.preventDefault();
+                      return;
+                    }
                     setDraggedBanner(banner.name);
                     setDraggedBannerIndex(index);
-                    setDraggedFromSlot(null);
+                    setDraggedFromSlot(null); // From banner list, not from grid
                   }}
-                  onDragEnd={() => setDraggedBannerIndex(null)}
+                  onDragEnd={() => resetDragState()}
                   onDragOver={(e) => {
                     if (viewingTab) return;
                     e.preventDefault();
@@ -739,17 +958,17 @@ export default function RazerBannerTool() {
                     if (viewingTab) return;
                     e.preventDefault();
                     e.stopPropagation();
-                    if (draggedBannerIndex !== null && draggedBannerIndex !== index) {
+                    if (draggedBannerIndex !== null && draggedBannerIndex !== index && draggedFromSlot === null) {
                       handleBannerReorder(draggedBannerIndex, index);
                     }
-                    setDraggedBannerIndex(null);
+                    resetDragState();
                   }}
                   style={{
                     backgroundColor: '#f0fdf4',
                     border: '2px solid #86efac',
                     borderRadius: '8px',
                     padding: '12px',
-                    cursor: !viewingTab ? 'move' : 'default',
+                    cursor: !viewingTab ? 'grab' : 'default',
                     opacity: (viewingTab ? 0.5 : (draggedBannerIndex === index ? 0.5 : 1)),
                     transition: 'all 0.2s',
                     position: 'relative'
@@ -874,20 +1093,19 @@ export default function RazerBannerTool() {
                             border: '2px solid #e5e7eb',
                             padding: '8px',
                             backgroundColor: getSlotZoneStyle(slot) === 'bg-yellow-50' ? '#fefce8' : '#f0fdf4',
-                            boxShadow: isHovering ? (isEligible ? '0 0 0 4px #86efac' : '0 0 0 4px #fca5a5') : 'none'
+                            boxShadow: isHovering ? (isEligible ? '0 0 0 4px #86efac' : '0 0 0 4px #fca5a5') : 'none',
+                            transition: 'box-shadow 0.15s ease'
                           }}
                         >
                           {banner ? (
                             <div
                               draggable={!viewingTab}
-                              onDragStart={() => {
-                                if (viewingTab) return;
-                                setDraggedBanner(banner);
-                                setDraggedFromSlot({ locale, slot });
-                              }}
+                              onDragStart={(e) => handleCellDragStart(e, locale, slot, banner)}
+                              onDragEnd={() => resetDragState()}
                               style={{ position: 'relative' }}
                               onMouseEnter={(e) => {
                                 if (!viewingTab) {
+                                  e.currentTarget.style.cursor = 'grab';
                                   const btn = e.currentTarget.querySelector('.clear-btn');
                                   if (btn) btn.style.opacity = '1';
                                 }
@@ -899,7 +1117,7 @@ export default function RazerBannerTool() {
                             >
                               <div style={{
                                 fontSize: '14px',
-                                cursor: 'move',
+                                cursor: viewingTab ? 'default' : 'grab',
                                 color: getTextStyle(locale, slot).includes('red') ? '#dc2626' : 
                                        getTextStyle(locale, slot).includes('blue') ? '#2563eb' : '#111827',
                                 fontWeight: getTextStyle(locale, slot).includes('font-semibold') ? '600' : 'normal'
