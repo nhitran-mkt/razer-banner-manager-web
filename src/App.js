@@ -71,13 +71,25 @@ export default function RazerBannerTool() {
         if (data.baseline) setBaseline(data.baseline);
         if (data.baselineSnapshot) setBaselineSnapshot(data.baselineSnapshot);
         if (data.currentWork) setCurrentWork(data.currentWork);
+        if (data.importedHighlights) setImportedHighlights(data.importedHighlights);
+        if (data.goLiveDates) setGoLiveDates(data.goLiveDates);
+        if (data.currentTabName) setCurrentTabName(data.currentTabName);
       } catch (e) { console.error('Load failed', e); }
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('razer-banner-data', JSON.stringify({ arrangements, banners, baseline, baselineSnapshot, currentWork }));
-  }, [arrangements, banners, baseline, baselineSnapshot, currentWork]);
+    localStorage.setItem('razer-banner-data', JSON.stringify({ 
+      arrangements, 
+      banners, 
+      baseline, 
+      baselineSnapshot, 
+      currentWork,
+      importedHighlights,
+      goLiveDates,
+      currentTabName
+    }));
+  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName]);
 
   useEffect(() => {
     if (toastMessage) {
