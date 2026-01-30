@@ -181,10 +181,11 @@ export default function RazerBannerTool() {
         const newBannersToAdd = [];
         let addedCount = 0;
         let skippedCount = 0;
+        const now = new Date().toISOString();
         
         allBannerNames.forEach(name => {
           if (!existingBannerNames.includes(name)) {
-            newBannersToAdd.push({ name, eligibleLocales: LOCALES });
+            newBannersToAdd.push({ name, eligibleLocales: LOCALES, createdAt: now });
             addedCount++;
           } else {
             skippedCount++;
@@ -258,19 +259,23 @@ export default function RazerBannerTool() {
         if (!newWork[sourceLocale]) newWork[sourceLocale] = {};
         if (sourceLocale === targetLocale && sourceSlot === targetSlot) return prev;
 
-        if (targetBanner) {
-          const targetBannerObj = banners.find(b => b.name === targetBanner);
-          if (targetBannerObj && !targetBannerObj.eligibleLocales.includes(sourceLocale)) {
-            showToast(`❌ Cannot swap: "${targetBanner}" not allowed in ${sourceLocale}`);
-            return prev;
+        // SAME LOCALE: Swap behavior
+        if (sourceLocale === targetLocale) {
+          if (targetBanner) {
+            newWork[sourceLocale][sourceSlot] = targetBanner;
+            newWork[targetLocale][targetSlot] = draggedBanner;
+            showToast(`🔄 Swapped: ${draggedBanner} ↔ ${targetBanner}`);
+          } else {
+            delete newWork[sourceLocale][sourceSlot];
+            newWork[targetLocale][targetSlot] = draggedBanner;
+            showToast(`✅ Moved: ${draggedBanner}`);
           }
-          newWork[sourceLocale][sourceSlot] = targetBanner;
+        } 
+        // DIFFERENT LOCALE: Duplicate (copy, don't remove source)
+        else {
           newWork[targetLocale][targetSlot] = draggedBanner;
-          showToast(`🔄 Swapped: ${draggedBanner} ↔ ${targetBanner}`);
-        } else {
-          delete newWork[sourceLocale][sourceSlot];
-          newWork[targetLocale][targetSlot] = draggedBanner;
-          showToast(`✅ Moved: ${draggedBanner}`);
+          // Keep source intact - this is a COPY operation
+          showToast(`📋 Copied: ${draggedBanner} → ${targetLocale}`);
         }
       } else {
         newWork[targetLocale][targetSlot] = draggedBanner;
@@ -337,7 +342,8 @@ export default function RazerBannerTool() {
 
   const addNewBanner = (name, eligibleLocales) => {
     if (banners.find(b => b.name === name)) { showToast('❌ Already exists'); return; }
-    setBanners(prev => [...prev, { name, eligibleLocales }]);
+    // Add new banner on TOP with createdAt timestamp
+    setBanners(prev => [{ name, eligibleLocales, createdAt: new Date().toISOString() }, ...prev]);
     setModals(prev => ({ ...prev, addBanner: false }));
     showToast(`✅ Added: ${name}`);
   };
@@ -817,13 +823,25 @@ export default function RazerBannerTool() {
                       borderRadius: 6, padding: 10, 
                       cursor: !viewingTab ? 'grab' : 'default', 
                       opacity: viewingTab ? 0.5 : (draggedBannerIndex === index ? 0.5 : 1),
-                      transition: 'all 0.15s ease'
+                      transition: 'all 0.15s ease',
+                      position: 'relative'
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: RAZER.black }}>{banner.name}</div>
-                        <div style={{ fontSize: 11, color: RAZER.gray }}>{banner.eligibleLocales.length === LOCALES.length ? 'All locales' : `${banner.eligibleLocales.length} locales`}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {/* NEW indicator - small green dot for banners created today */}
+                        {banner.createdAt && new Date(banner.createdAt).toDateString() === new Date().toDateString() && (
+                          <div style={{ 
+                            width: 6, height: 6, 
+                            backgroundColor: RAZER.green, 
+                            borderRadius: '50%',
+                            flexShrink: 0
+                          }} title="Added today" />
+                        )}
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: RAZER.black }}>{banner.name}</div>
+                          <div style={{ fontSize: 11, color: RAZER.gray }}>{banner.eligibleLocales.length === LOCALES.length ? 'All locales' : `${banner.eligibleLocales.length} locales`}</div>
+                        </div>
                       </div>
                       {!viewingTab && (
                         <div style={{ display: 'flex', gap: 4 }}>
@@ -839,11 +857,45 @@ export default function RazerBannerTool() {
           </div>
 
           {/* Right Panel - Grid */}
-          <div style={{ backgroundColor: 'white', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', padding: 16, overflowX: 'auto', border: `2px solid ${RAZER.green}` }}>
-            <h2 style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, color: RAZER.black }}>
-              Arrangement Grid
-            </h2>
-            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, borderRadius: 8, overflow: 'hidden', border: `2px solid ${RAZER.green}` }}>
+          <div style={{ backgroundColor: 'white', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: `2px solid ${RAZER.green}`, overflow: 'hidden' }}>
+            {/* GO LIVE Header Bar */}
+            <div style={{ 
+              backgroundColor: 'white', 
+              padding: '10px 16px', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              borderBottom: `2px solid ${RAZER.green}`
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: RAZER.black, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  🚀 GO LIVE
+                </span>
+                <input 
+                  type="datetime-local" 
+                  style={{ 
+                    fontSize: 12, padding: '4px 8px', borderRadius: 4, 
+                    border: `1px solid ${RAZER.green}`, backgroundColor: 'white', color: RAZER.black,
+                    fontWeight: 500
+                  }}
+                />
+                <span style={{ fontSize: 11, color: RAZER.gray }}>SGT</span>
+              </div>
+              {viewingTab && (
+                <span style={{ 
+                  backgroundColor: RAZER.green, color: 'white', 
+                  fontSize: 11, fontWeight: 600, padding: '4px 10px', 
+                  borderRadius: 4 
+                }}>
+                  Viewing: {viewingTab}
+                </span>
+              )}
+            </div>
+            
+            {/* Grid Table */}
+            <div style={{ padding: 16 }}>
+            <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, borderRadius: 6, overflow: 'hidden', border: '1px solid #d1d5db' }}>
               <thead>
                 <tr>
                   <th style={{ backgroundColor: '#1a1a1a', color: RAZER.white, padding: 12, fontWeight: 700, position: 'sticky', left: 0, zIndex: 10, borderBottom: `2px solid ${RAZER.green}`, borderRight: '1px solid #333' }}>Slot</th>
@@ -939,6 +991,8 @@ export default function RazerBannerTool() {
                 </tr>
               </tbody>
             </table>
+            </div>
+            </div>
           </div>
         </div>
       </div>
