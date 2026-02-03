@@ -783,8 +783,8 @@ export default function RazerBannerTool() {
       const colors = {
         headerBg: '1A1A1A',           // Dark header background (matches preview)
         headerFont: 'FFFFFF',          // White text for header
-        slotABg: 'FEFCE8',            // Zone A - light yellow (matches #fefce8)
-        slotBBg: 'ECFDF5',            // Zone B - light green (matches #ecfdf5)
+        slotABg: 'FFFFCC',            // Zone A - light yellow (#FFFFCC)
+        slotBBg: 'DAF2D0',            // Zone B - light green (#DAF2D0)
         slotAFont: '92400E',          // Zone A slot label color
         slotBFont: '166534',          // Zone B slot label color
         statusBg: 'FFFFFF',           // Status row - white background
@@ -812,15 +812,40 @@ export default function RazerBannerTool() {
         right: { style: 'thin', color: { argb: colors.borderColor } }
       };
 
-      const getExportHighlightColor = (data, locale, slot) => {
-        if (!baselineSnapshot) return 'none';
-        const oldBanner = baselineSnapshot?.[locale]?.[slot];
+      const getExportHighlightColor = (data, locale, slot, tabName) => {
+        // First check if tab has saved highlights from import
+        if (tabName && importedHighlights[tabName]?.[locale]?.[slot]) {
+          return importedHighlights[tabName][locale][slot];
+        }
+        
+        // Determine effective baseline for this tab
+        let effectiveSnapshot = null;
+        if (tabName === 'Current Work') {
+          // For current work, use the active baseline
+          if (isEditingWorking && !currentTabName) {
+            effectiveSnapshot = baselineSnapshot;
+          } else if (currentTabName && tabBaselines[currentTabName]) {
+            const baselineTab = tabBaselines[currentTabName];
+            effectiveSnapshot = arrangements[baselineTab] || null;
+          }
+        } else if (tabName && tabBaselines[tabName]) {
+          // For saved tabs, use their stored baseline
+          const baselineTab = tabBaselines[tabName];
+          effectiveSnapshot = arrangements[baselineTab] || null;
+        }
+        
+        // If no baseline found, no highlighting
+        if (!effectiveSnapshot) return 'none';
+        
+        const oldBanner = effectiveSnapshot?.[locale]?.[slot];
         const newBanner = data?.[locale]?.[slot];
         if (!newBanner || oldBanner === newBanner) return 'none';
-        for (const loc of LOCALES) {
-          if (Object.values(baselineSnapshot?.[loc] || {}).includes(newBanner)) return 'blue';
-        }
-        return 'red';
+        
+        // Check if banner exists in THIS LOCALE in baseline (any slot)
+        const baselineLocaleData = effectiveSnapshot?.[locale] || {};
+        const existsInThisLocale = Object.values(baselineLocaleData).includes(newBanner);
+        
+        return existsInThisLocale ? 'blue' : 'red';
       };
 
       const getExportLocaleStatus = (data, locale) => {
@@ -873,10 +898,14 @@ export default function RazerBannerTool() {
               cell.font = { bold: true, color: { argb: isSlotA ? colors.slotAFont : colors.slotBFont } };
             } else {
               const locale = LOCALES[colNum - 2];
-              const highlight = getExportHighlightColor(data, locale, slot);
-              if (highlight === 'red') cell.font = { bold: true, color: { argb: colors.changedFont } };
-              else if (highlight === 'blue') cell.font = { bold: true, color: { argb: colors.movedFont } };
-              else cell.font = { color: { argb: colors.normalFont } };
+              if (locale) {
+                const highlight = getExportHighlightColor(data, locale, slot, tabName);
+                if (highlight === 'red') cell.font = { bold: true, color: { argb: colors.changedFont } };
+                else if (highlight === 'blue') cell.font = { bold: true, color: { argb: colors.movedFont } };
+                else cell.font = { color: { argb: colors.normalFont } };
+              } else {
+                cell.font = { color: { argb: colors.normalFont } };
+              }
             }
           });
         });
@@ -928,7 +957,7 @@ export default function RazerBannerTool() {
   // Effective tab for GO LIVE display
   const effectiveTab = currentTabName || (isEditingWorking ? '__working__' : sortedDates[0]);
   
-  const getSlotBg = (slot) => slot.startsWith('A') ? '#fefce8' : '#f0fdf4';
+  const getSlotBg = (slot) => slot.startsWith('A') ? '#FFFFCC' : '#DAF2D0';
   const getTextColor = (locale, slot) => {
     const c = getHighlightColor(locale, slot);
     return c === 'red' ? '#dc2626' : c === 'blue' ? '#2563eb' : RAZER.black;
@@ -1485,7 +1514,7 @@ export default function RazerBannerTool() {
                     <td style={{ 
                       padding: 10, fontWeight: 700, 
                       position: 'sticky', left: 0, zIndex: 5, 
-                      backgroundColor: slot.startsWith('A') ? '#fefce8' : '#ecfdf5',
+                      backgroundColor: slot.startsWith('A') ? '#FFFFCC' : '#DAF2D0',
                       color: slot.startsWith('A') ? '#92400e' : '#166534',
                       borderTop: slotIdx === 0 ? '1px solid #d1d5db' : 'none',
                       borderBottom: '1px solid #d1d5db',
@@ -1503,7 +1532,7 @@ export default function RazerBannerTool() {
                           onDrop={(e) => handleDrop(e, locale, slot)}
                           style={{ 
                             padding: 8, 
-                            backgroundColor: slot.startsWith('A') ? '#fefce8' : '#ecfdf5', 
+                            backgroundColor: slot.startsWith('A') ? '#FFFFCC' : '#DAF2D0', 
                             boxShadow: isHovering ? (hoverSlot?.eligible ? `inset 0 0 0 2px ${RAZER.green}` : 'inset 0 0 0 2px #ef4444') : 'none',
                             transition: 'box-shadow 0.15s ease',
                             borderTop: slotIdx === 0 ? '1px solid #d1d5db' : 'none',
