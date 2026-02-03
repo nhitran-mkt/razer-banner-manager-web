@@ -29,8 +29,9 @@ export default function RazerBannerTool() {
   });
   const [currentTabName, setCurrentTabName] = useState(null); // Track working tab name
   const [isEditingWorking, setIsEditingWorking] = useState(false); // Track if user clicked +New
-  const [baseline, setBaseline] = useState(null);
+  const [baseline, setBaseline] = useState(null); // Current working baseline
   const [baselineSnapshot, setBaselineSnapshot] = useState(null);
+  const [tabBaselines, setTabBaselines] = useState({}); // Each tab's baseline: { "3-Feb": "2-Feb", "4-Feb": "3-Feb" }
   const [importedHighlights, setImportedHighlights] = useState({}); // Colors from Excel
   const [goLiveDates, setGoLiveDates] = useState({}); // Go Live dates per tab: { tabName: 'datetime' }
   const [draggedBannerIndex, setDraggedBannerIndex] = useState(null);
@@ -74,6 +75,7 @@ export default function RazerBannerTool() {
         if (data.importedHighlights) setImportedHighlights(data.importedHighlights);
         if (data.goLiveDates) setGoLiveDates(data.goLiveDates);
         if (data.currentTabName) setCurrentTabName(data.currentTabName);
+        if (data.tabBaselines) setTabBaselines(data.tabBaselines);
       } catch (e) { console.error('Load failed', e); }
     }
   }, []);
@@ -87,9 +89,10 @@ export default function RazerBannerTool() {
       currentWork,
       importedHighlights,
       goLiveDates,
-      currentTabName
+      currentTabName,
+      tabBaselines
     }));
-  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName]);
+  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName, tabBaselines]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -409,32 +412,49 @@ export default function RazerBannerTool() {
   };
 
   const getHighlightColor = (locale, slot) => {
-    // ALWAYS check if current tab has imported colors from Excel first
-    // This preserves colors from imported tabs regardless of baseline state
+    // ALWAYS check if current tab has imported/saved colors from Excel first
+    // This preserves colors from imported tabs
     if (currentTabName && importedHighlights[currentTabName]?.[locale]?.[slot]) {
       return importedHighlights[currentTabName][locale][slot];
     }
     
-    // If editing a saved tab (not Working), don't show comparison highlights
-    // Only Working tab (isEditingWorking && !currentTabName) should show live comparison
-    if (currentTabName && !isEditingWorking) {
-      return 'none';
+    // Determine which baseline to use:
+    // - For Working tab: use current baseline
+    // - For saved tab: use that tab's stored baseline
+    let effectiveBaseline = null;
+    let effectiveSnapshot = null;
+    
+    if (isEditingWorking && !currentTabName) {
+      // Working tab - use current baseline
+      effectiveBaseline = baseline;
+      effectiveSnapshot = baselineSnapshot;
+    } else if (currentTabName && tabBaselines[currentTabName]) {
+      // Saved tab - use its stored baseline
+      effectiveBaseline = tabBaselines[currentTabName];
+      effectiveSnapshot = arrangements[effectiveBaseline] ? arrangements[effectiveBaseline] : null;
     }
     
-    // If no baseline set, no comparison highlights
-    if (!baselineSnapshot) return 'none';
+    // If no baseline, no comparison highlights
+    if (!effectiveSnapshot) return 'none';
     
-    // Normal comparison with baseline (only for Working tab)
-    const oldBanner = baselineSnapshot?.[locale]?.[slot];
+    // Get current banner in this slot
     const newBanner = currentWork?.[locale]?.[slot];
-    if (!newBanner || oldBanner === newBanner) return 'none';
+    if (!newBanner) return 'none';
     
-    // Check if banner exists elsewhere in baseline (moved = blue)
-    for (const loc of LOCALES) {
-      if (Object.values(baselineSnapshot?.[loc] || {}).includes(newBanner)) return 'blue';
-    }
-    // New banner = red
-    return 'red';
+    // Get what was in this slot in baseline
+    const oldBanner = effectiveSnapshot?.[locale]?.[slot];
+    
+    // If same banner in same slot, no highlight
+    if (oldBanner === newBanner) return 'none';
+    
+    // Check if this banner exists in THIS LOCALE in the baseline (any slot)
+    // This determines if banner is NEW to this locale or just MOVED within locale
+    const baselineLocaleData = effectiveSnapshot?.[locale] || {};
+    const existsInThisLocale = Object.values(baselineLocaleData).includes(newBanner);
+    
+    // If banner exists in this locale in baseline → blue (moved within locale)
+    // If banner doesn't exist in this locale in baseline → red (new for this locale)
+    return existsInThisLocale ? 'blue' : 'red';
   };
 
   const getLocaleStatus = (locale) => {
@@ -537,6 +557,7 @@ export default function RazerBannerTool() {
     const newArrangements = { ...arrangements };
     const newHighlights = { ...importedHighlights };
     const newGoLiveDates = { ...goLiveDates };
+    const newTabBaselines = { ...tabBaselines };
     
     if (currentTabName && currentTabName !== tabName) {
       // Rename: move data from old name to new name
@@ -553,6 +574,11 @@ export default function RazerBannerTool() {
         newGoLiveDates[tabName] = newGoLiveDates[currentTabName];
         delete newGoLiveDates[currentTabName];
       }
+      // Move tab baseline
+      if (newTabBaselines[currentTabName]) {
+        newTabBaselines[tabName] = newTabBaselines[currentTabName];
+        delete newTabBaselines[currentTabName];
+      }
     } else if (!currentTabName && newGoLiveDates['__working__']) {
       // Transfer from __working__ to new tab name
       newGoLiveDates[tabName] = newGoLiveDates['__working__'];
@@ -562,24 +588,24 @@ export default function RazerBannerTool() {
     // Save current work under new name
     newArrangements[tabName] = JSON.parse(JSON.stringify(currentWork));
     
+    // Save this tab's baseline (the baseline it was created from)
+    if (baseline && !newTabBaselines[tabName]) {
+      newTabBaselines[tabName] = baseline;
+    }
+    
     // Generate highlights for new tab based on baseline comparison
     if (baseline && baselineSnapshot && !newHighlights[tabName]) {
       const highlights = {};
       LOCALES.forEach(locale => {
         highlights[locale] = {};
+        const baselineLocaleData = baselineSnapshot?.[locale] || {};
         SLOTS.forEach(slot => {
           const oldBanner = baselineSnapshot?.[locale]?.[slot];
           const newBanner = currentWork?.[locale]?.[slot];
           if (newBanner && oldBanner !== newBanner) {
-            // Check if moved (exists elsewhere in baseline)
-            let isMoved = false;
-            for (const loc of LOCALES) {
-              if (Object.values(baselineSnapshot?.[loc] || {}).includes(newBanner)) {
-                isMoved = true;
-                break;
-              }
-            }
-            highlights[locale][slot] = isMoved ? 'blue' : 'red';
+            // Check if banner exists in THIS LOCALE in baseline (any slot)
+            const existsInThisLocale = Object.values(baselineLocaleData).includes(newBanner);
+            highlights[locale][slot] = existsInThisLocale ? 'blue' : 'red';
           }
         });
       });
@@ -589,6 +615,7 @@ export default function RazerBannerTool() {
     setArrangements(newArrangements);
     setImportedHighlights(newHighlights);
     setGoLiveDates(newGoLiveDates);
+    setTabBaselines(newTabBaselines);
     
     // Set as current working tab name but DO NOT change baseline
     // This keeps the color highlighting intact
@@ -657,9 +684,14 @@ export default function RazerBannerTool() {
     const newGoLiveDates = { ...goLiveDates };
     delete newGoLiveDates[tabName];
     
+    // Also remove from tabBaselines
+    const newTabBaselines = { ...tabBaselines };
+    delete newTabBaselines[tabName];
+    
     setArrangements(newArrangements);
     setImportedHighlights(newHighlights);
     setGoLiveDates(newGoLiveDates);
+    setTabBaselines(newTabBaselines);
     
     // If deleted tab was current, switch to another
     if (currentTabName === tabName) {
@@ -713,9 +745,22 @@ export default function RazerBannerTool() {
       delete newGoLiveDates[oldName];
     }
     
+    const newTabBaselines = { ...tabBaselines };
+    if (newTabBaselines[oldName]) {
+      newTabBaselines[newName] = newTabBaselines[oldName];
+      delete newTabBaselines[oldName];
+    }
+    // Also update any tabs that use oldName as their baseline
+    Object.keys(newTabBaselines).forEach(tab => {
+      if (newTabBaselines[tab] === oldName) {
+        newTabBaselines[tab] = newName;
+      }
+    });
+    
     setArrangements(newArrangements);
     setImportedHighlights(newHighlights);
     setGoLiveDates(newGoLiveDates);
+    setTabBaselines(newTabBaselines);
     
     if (currentTabName === oldName) {
       setCurrentTabName(newName);
@@ -920,11 +965,19 @@ export default function RazerBannerTool() {
               </h1>
               <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Drag & drop anywhere • Swap A↔B slots • Auto-import banners</p>
             </div>
-            {baseline && (
-              <div style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: RAZER.white, padding: '8px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600, border: '1px solid rgba(255,255,255,0.2)' }}>
-                Baseline: <span style={{ fontWeight: 700 }}>{baseline}</span>
-              </div>
-            )}
+            {(() => {
+              // Show effective baseline for current context
+              const effectiveBaseline = (isEditingWorking && !currentTabName) 
+                ? baseline 
+                : (currentTabName && tabBaselines[currentTabName]) 
+                  ? tabBaselines[currentTabName] 
+                  : null;
+              return effectiveBaseline ? (
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: RAZER.white, padding: '8px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600, border: '1px solid rgba(255,255,255,0.2)' }}>
+                  Baseline: <span style={{ fontWeight: 700 }}>{effectiveBaseline}</span>
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
 
@@ -950,9 +1003,7 @@ export default function RazerBannerTool() {
                     setCurrentWork(JSON.parse(JSON.stringify(arrangements[val])));
                     setCurrentTabName(val);
                     setIsEditingWorking(false);
-                    // Clear baseline comparison when switching to a saved tab
-                    // This ensures imported colors are shown, not comparison highlights
-                    setBaselineSnapshot(null);
+                    // DON'T clear baseline - keep it for future Working tabs
                   }
                 }} 
                 style={{ 
@@ -1157,19 +1208,36 @@ export default function RazerBannerTool() {
           {/* Reset */}
           <button 
             onClick={() => { 
-              if (!baseline || !baselineSnapshot) { showToast('⚠️ No baseline'); return; }
-              setCurrentWork(JSON.parse(JSON.stringify(baselineSnapshot)));
-              showToast('✓ Reset');
+              // Determine effective baseline for current tab
+              let effectiveBaseline = null;
+              let effectiveSnapshot = null;
+              
+              if (isEditingWorking && !currentTabName) {
+                // Working tab - use current baseline
+                effectiveBaseline = baseline;
+                effectiveSnapshot = baselineSnapshot;
+              } else if (currentTabName && tabBaselines[currentTabName]) {
+                // Saved tab - use its stored baseline
+                effectiveBaseline = tabBaselines[currentTabName];
+                effectiveSnapshot = arrangements[effectiveBaseline] ? arrangements[effectiveBaseline] : null;
+              }
+              
+              if (!effectiveBaseline || !effectiveSnapshot) { 
+                showToast('⚠️ No baseline for this tab'); 
+                return; 
+              }
+              setCurrentWork(JSON.parse(JSON.stringify(effectiveSnapshot)));
+              showToast(`✓ Reset to ${effectiveBaseline}`);
             }} 
-            disabled={!baseline }
+            disabled={!(isEditingWorking ? baseline : (currentTabName && tabBaselines[currentTabName]))}
             title="Reset to Baseline"
             style={{ 
               display: 'flex', alignItems: 'center', gap: 6, 
-              backgroundColor: (!baseline ) ? '#f8fafc' : '#fef2f2', 
-              color: (!baseline ) ? '#94a3b8' : '#dc2626', 
+              backgroundColor: (!(isEditingWorking ? baseline : (currentTabName && tabBaselines[currentTabName]))) ? '#f8fafc' : '#fef2f2', 
+              color: (!(isEditingWorking ? baseline : (currentTabName && tabBaselines[currentTabName]))) ? '#94a3b8' : '#dc2626', 
               padding: '8px 14px', borderRadius: 6, 
-              border: `1px solid ${(!baseline ) ? '#e2e8f0' : '#fecaca'}`, 
-              cursor: (!baseline ) ? 'not-allowed' : 'pointer', 
+              border: `1px solid ${(!(isEditingWorking ? baseline : (currentTabName && tabBaselines[currentTabName]))) ? '#e2e8f0' : '#fecaca'}`, 
+              cursor: (!(isEditingWorking ? baseline : (currentTabName && tabBaselines[currentTabName]))) ? 'not-allowed' : 'pointer', 
               fontSize: 13, fontWeight: 500 
             }}
           >
@@ -1402,12 +1470,12 @@ export default function RazerBannerTool() {
                 }
               `}</style>
               <div className="grid-scroll-container" style={{ maxHeight: 'none' }}>
-                <table style={{ width: '1900px', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, borderRadius: 6, border: '1px solid #d1d5db' }}>
+                <table style={{ width: '1900px', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13 }}>
               <thead>
                 <tr>
-                  <th style={{ backgroundColor: '#1a1a1a', color: RAZER.white, padding: 12, fontWeight: 700, position: 'sticky', left: 0, zIndex: 5, borderBottom: `2px solid ${RAZER.green}`, borderRight: '1px solid #333' }}>Slot</th>
+                  <th style={{ backgroundColor: '#1a1a1a', color: RAZER.white, padding: 12, fontWeight: 700, position: 'sticky', left: 0, zIndex: 5, borderBottom: `2px solid ${RAZER.green}`, borderTop: '1px solid #333', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>Slot</th>
                   {LOCALES.map((loc, idx) => (
-                    <th key={loc} style={{ backgroundColor: '#1a1a1a', color: RAZER.white, padding: 12, fontWeight: 700, minWidth: 110, borderBottom: `2px solid ${RAZER.green}`, borderRight: idx < LOCALES.length - 1 ? '1px solid #333' : 'none' }}>{loc}</th>
+                    <th key={loc} style={{ backgroundColor: '#1a1a1a', color: RAZER.white, padding: 12, fontWeight: 700, minWidth: 110, borderBottom: `2px solid ${RAZER.green}`, borderTop: '1px solid #333', borderRight: '1px solid #333' }}>{loc}</th>
                   ))}
                 </tr>
               </thead>
@@ -1419,7 +1487,9 @@ export default function RazerBannerTool() {
                       position: 'sticky', left: 0, zIndex: 5, 
                       backgroundColor: slot.startsWith('A') ? '#fefce8' : '#ecfdf5',
                       color: slot.startsWith('A') ? '#92400e' : '#166534',
+                      borderTop: slotIdx === 0 ? '1px solid #d1d5db' : 'none',
                       borderBottom: '1px solid #d1d5db',
+                      borderLeft: '1px solid #d1d5db',
                       borderRight: '1px solid #d1d5db'
                     }}>{slot}</td>
                     {LOCALES.map((locale, locIdx) => {
@@ -1436,8 +1506,9 @@ export default function RazerBannerTool() {
                             backgroundColor: slot.startsWith('A') ? '#fefce8' : '#ecfdf5', 
                             boxShadow: isHovering ? (hoverSlot?.eligible ? `inset 0 0 0 2px ${RAZER.green}` : 'inset 0 0 0 2px #ef4444') : 'none',
                             transition: 'box-shadow 0.15s ease',
+                            borderTop: slotIdx === 0 ? '1px solid #d1d5db' : 'none',
                             borderBottom: '1px solid #d1d5db',
-                            borderRight: locIdx < LOCALES.length - 1 ? '1px solid #d1d5db' : 'none'
+                            borderRight: '1px solid #d1d5db'
                           }}
                         >
                           {banner ? (
@@ -1479,7 +1550,7 @@ export default function RazerBannerTool() {
                 ))}
                 {/* Status Row */}
                 <tr>
-                  <td style={{ padding: 10, fontWeight: 700, position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', borderRight: '1px solid #d1d5db', color: RAZER.gray }}>Status</td>
+                  <td style={{ padding: 10, fontWeight: 700, position: 'sticky', left: 0, zIndex: 5, backgroundColor: 'white', borderBottom: '1px solid #d1d5db', borderLeft: '1px solid #d1d5db', borderRight: '1px solid #d1d5db', color: RAZER.gray }}>Status</td>
                   {LOCALES.map((locale, idx) => {
                     const status = getLocaleStatus(locale);
                     return (
@@ -1487,7 +1558,8 @@ export default function RazerBannerTool() {
                         padding: 8, textAlign: 'center', fontSize: 12, fontWeight: 600,
                         backgroundColor: 'white',
                         color: status.status === 'error' ? '#dc2626' : status.status === 'warning' ? '#d97706' : '#16a34a',
-                        borderRight: idx < LOCALES.length - 1 ? '1px solid #d1d5db' : 'none'
+                        borderBottom: '1px solid #d1d5db',
+                        borderRight: '1px solid #d1d5db'
                       }}>
                         {status.message}
                       </td>
