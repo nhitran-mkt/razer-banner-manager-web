@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Download, Plus, Edit2, Trash2, X, Upload, Search, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
@@ -43,6 +43,9 @@ export default function RazerBannerTool() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [modals, setModals] = useState({ addBanner: false, findReplace: false, duplicate: false, editBanner: null, saveTab: false, confirmDelete: null, newArrangement: false, deleteTab: false, renameTab: false });
 
+  // Guard: prevent save effect from overwriting localStorage before load completes
+  const hasLoaded = useRef(false);
+
   // Load RazerF5 font
   useEffect(() => {
     const style = document.createElement('style');
@@ -76,23 +79,39 @@ export default function RazerBannerTool() {
         if (data.goLiveDates) setGoLiveDates(data.goLiveDates);
         if (data.currentTabName) setCurrentTabName(data.currentTabName);
         if (data.tabBaselines) setTabBaselines(data.tabBaselines);
+        if (data.isEditingWorking) setIsEditingWorking(data.isEditingWorking);
       } catch (e) { console.error('Load failed', e); }
     }
+    // Mark load as complete — save effect can now write safely
+    hasLoaded.current = true;
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('razer-banner-data', JSON.stringify({ 
-      arrangements, 
-      banners, 
-      baseline, 
-      baselineSnapshot, 
-      currentWork,
-      importedHighlights,
-      goLiveDates,
-      currentTabName,
-      tabBaselines
-    }));
-  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName, tabBaselines]);
+    // Skip saving until initial load from localStorage is complete
+    // This prevents the default empty state from overwriting real data
+    if (!hasLoaded.current) return;
+
+    try {
+      localStorage.setItem('razer-banner-data', JSON.stringify({
+        arrangements,
+        banners,
+        baseline,
+        baselineSnapshot,
+        currentWork,
+        importedHighlights,
+        goLiveDates,
+        currentTabName,
+        tabBaselines,
+        isEditingWorking
+      }));
+    } catch (e) {
+      console.error('Save to localStorage failed:', e);
+      // Likely quota exceeded — warn the user
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        showToast('⚠️ Storage full! Export your data to avoid losing work.');
+      }
+    }
+  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName, tabBaselines, isEditingWorking]);
 
   useEffect(() => {
     if (toastMessage) {
