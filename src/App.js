@@ -189,68 +189,78 @@ export default function RazerBannerTool() {
       xlsxWorkbook.SheetNames.forEach(sheetName => {
         const sheet = xlsxWorkbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
-        
-        // Read Go Live date from row 12 (index 11)
-        // Look for datetime value in row 12
-        if (jsonData[11]) {
-          const row12 = jsonData[11];
-          for (let i = 0; i < row12.length; i++) {
-            const cellValue = row12[i];
-            if (cellValue) {
-              const cellStr = String(cellValue).trim();
-              // Try to parse as date
-              if (cellStr && cellStr !== '' && cellStr !== 'Go Live' && cellStr !== 'GO LIVE') {
-                // Check if it's a date string or Excel serial number
-                let dateValue = null;
-                
-                // Try parsing as date string
-                const parsed = new Date(cellStr);
-                if (!isNaN(parsed.getTime())) {
-                  dateValue = parsed;
-                }
-                
-                // Also check raw cell for Excel date
-                const rawSheet = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-                const rawCell = rawSheet[11]?.[i];
-                if (typeof rawCell === 'number' && rawCell > 40000 && rawCell < 50000) {
-                  // Excel serial date
-                  dateValue = new Date((rawCell - 25569) * 86400 * 1000);
-                }
-                
-                if (dateValue) {
-                  // Format as datetime-local value
-                  const year = dateValue.getFullYear();
-                  const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-                  const day = String(dateValue.getDate()).padStart(2, '0');
-                  const hours = String(dateValue.getHours()).padStart(2, '0');
-                  const minutes = String(dateValue.getMinutes()).padStart(2, '0');
-                  newGoLiveDates[sheetName] = `${year}-${month}-${day}T${hours}:${minutes}`;
-                  break;
-                }
-              }
-            }
-          }
-        }
-        
-        // Find header row (look for row containing locale codes)
+        const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+
+        // Find header row dynamically — scan ALL rows for the row containing "Position" + locale codes
+        // This handles files where data starts at row 13, 14, 17, or any row
         let headerRowIndex = -1;
-        for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
+        for (let i = 0; i < jsonData.length; i++) {
           const row = jsonData[i];
-          if (row && row.some(cell => LOCALES.includes(String(cell).trim()))) {
+          if (!row) continue;
+          const rowStrings = row.map(cell => String(cell).trim());
+          // Header row must contain "Position" (or "Slot") AND at least one locale code
+          const hasPositionCol = rowStrings.some(s => s === 'Position' || s === 'Slot');
+          const hasLocaleCol = rowStrings.some(s => LOCALES.includes(s) || LOCALES.some(loc => s.includes(loc)));
+          if (hasPositionCol && hasLocaleCol) {
             headerRowIndex = i;
             break;
           }
         }
-        
+
         if (headerRowIndex === -1) return; // Skip sheets without valid headers
-        
+
+        // Read Go Live date — scan rows ABOVE the header row for datetime values
+        // Look for a row containing "Go Live" label or a date value
+        for (let rowIdx = 0; rowIdx < headerRowIndex; rowIdx++) {
+          const row = jsonData[rowIdx];
+          if (!row) continue;
+          for (let colIdx = 0; colIdx < row.length; colIdx++) {
+            const cellValue = row[colIdx];
+            if (!cellValue) continue;
+            const cellStr = String(cellValue).trim();
+            if (!cellStr || cellStr === 'Go Live' || cellStr === 'GO LIVE') continue;
+
+            let dateValue = null;
+
+            // Try parsing as date string
+            const parsed = new Date(cellStr);
+            if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
+              dateValue = parsed;
+            }
+
+            // Also check raw cell for Excel serial date
+            const rawCell = rawData[rowIdx]?.[colIdx];
+            if (typeof rawCell === 'number' && rawCell > 40000 && rawCell < 60000) {
+              dateValue = new Date((rawCell - 25569) * 86400 * 1000);
+            }
+
+            if (dateValue) {
+              const year = dateValue.getFullYear();
+              const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+              const day = String(dateValue.getDate()).padStart(2, '0');
+              const hours = String(dateValue.getHours()).padStart(2, '0');
+              const minutes = String(dateValue.getMinutes()).padStart(2, '0');
+              newGoLiveDates[sheetName] = `${year}-${month}-${day}T${hours}:${minutes}`;
+              break;
+            }
+          }
+          if (newGoLiveDates[sheetName]) break; // Found a date, stop scanning
+        }
+
+        // Map header columns to locale indices
+        // Handles variations like "IT (no blade)", "IT", etc.
         const headers = jsonData[headerRowIndex];
         const localeIndices = {};
         headers.forEach((header, idx) => {
           const trimmed = String(header).trim();
           if (trimmed === 'Position' || trimmed === 'Slot') return;
-          if (trimmed.includes('IT')) localeIndices['IT'] = idx;
-          else if (LOCALES.includes(trimmed)) localeIndices[trimmed] = idx;
+          // Check each locale — match exact or as substring (e.g. "IT (no blade)" → IT)
+          for (const locale of LOCALES) {
+            if (trimmed === locale || (locale === 'IT' && trimmed.toUpperCase().startsWith('IT'))) {
+              localeIndices[locale] = idx;
+              break;
+            }
+          }
         });
         
         const arrangement = {};
@@ -1306,16 +1316,35 @@ export default function RazerBannerTool() {
               <h2 style={{ fontWeight: 600, fontSize: 14, color: RAZER.black }}>
                 Banners <span style={{ color: RAZER.gray, fontWeight: 400 }}>({banners.length})</span>
               </h2>
-              <button 
-                onClick={() => setModals(prev => ({ ...prev, addBanner: true }))} 
-                style={{ 
-                  backgroundColor: RAZER.green, color: RAZER.white, border: 'none', 
-                  borderRadius: 4, cursor: 'pointer', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 4,
-                  fontSize: 12, fontWeight: 700
-                }}
-              >
-                <Plus size={14} /> Add
-              </button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setModals(prev => ({ ...prev, addBanner: true }))}
+                  style={{
+                    backgroundColor: RAZER.green, color: RAZER.white, border: 'none',
+                    borderRadius: 4, cursor: 'pointer', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 4,
+                    fontSize: 12, fontWeight: 700
+                  }}
+                >
+                  <Plus size={14} /> Add
+                </button>
+                {banners.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Delete all ${banners.length} banners? This cannot be undone.`)) {
+                        setBanners([]);
+                        showToast(`🗑️ Deleted all banners`);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#dc2626', color: RAZER.white, border: 'none',
+                      borderRadius: 4, cursor: 'pointer', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 4,
+                      fontSize: 12, fontWeight: 700
+                    }}
+                  >
+                    <Trash2 size={14} /> Del All
+                  </button>
+                )}
+              </div>
             </div>
             <p style={{ fontSize: 11, color: RAZER.gray, marginBottom: 12 }}>Drag to any slot (A↔B supported)</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
