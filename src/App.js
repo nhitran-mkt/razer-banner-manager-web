@@ -68,6 +68,12 @@ const DEFAULT_CAMPAIGNS = [
   { name: 'BFCW', type: 'formula', formula: 'black_friday', notes: '' },
 ];
 
+// Bump this version whenever DEFAULT_CAMPAIGNS dates are updated.
+// The app compares this against the version saved in localStorage —
+// if they differ, it merges the new default dates into saved campaigns
+// while preserving user overrides (dateOverride, active, custom campaigns).
+const CAMPAIGN_DEFAULTS_VERSION = '2026-04-13';
+
 // Calculate the actual date for a campaign in a given year
 const getCampaignDate = (campaign, year) => {
   if (campaign.dateOverride) return new Date(campaign.dateOverride);
@@ -168,7 +174,40 @@ export default function RazerBannerTool() {
         if (data.currentTabName) setCurrentTabName(data.currentTabName);
         if (data.tabBaselines) setTabBaselines(data.tabBaselines);
         if (data.isEditingWorking) setIsEditingWorking(data.isEditingWorking);
-        if (data.campaigns && Array.isArray(data.campaigns)) setCampaigns(data.campaigns);
+        if (data.campaigns && Array.isArray(data.campaigns)) {
+          // Check if DEFAULT_CAMPAIGNS have been updated since last save
+          if (data.campaignDefaultsVersion !== CAMPAIGN_DEFAULTS_VERSION) {
+            // Merge: update default campaign dates, keep user overrides & custom campaigns
+            const defaultMap = {};
+            DEFAULT_CAMPAIGNS.forEach(dc => { defaultMap[dc.name] = dc; });
+
+            const merged = data.campaigns.map(saved => {
+              const updated = defaultMap[saved.name];
+              if (updated) {
+                // Default campaign — refresh date fields, keep user's overrides
+                return {
+                  ...updated,
+                  id: saved.id,
+                  active: saved.active,
+                  dateOverride: saved.dateOverride || undefined,
+                };
+              }
+              // Custom campaign added by user — keep as-is
+              return saved;
+            });
+
+            // Add any NEW default campaigns not in saved data
+            DEFAULT_CAMPAIGNS.forEach(dc => {
+              if (!merged.find(m => m.name === dc.name)) {
+                merged.push({ ...dc, active: true, id: dc.name });
+              }
+            });
+
+            setCampaigns(merged);
+          } else {
+            setCampaigns(data.campaigns);
+          }
+        }
       } catch (e) { console.error('Load failed', e); }
     }
     // Mark load as complete — save effect can now write safely
@@ -192,7 +231,8 @@ export default function RazerBannerTool() {
         currentTabName,
         tabBaselines,
         isEditingWorking,
-        campaigns
+        campaigns,
+        campaignDefaultsVersion: CAMPAIGN_DEFAULTS_VERSION
       }));
     } catch (e) {
       console.error('Save to localStorage failed:', e);
