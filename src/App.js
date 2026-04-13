@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Plus, Edit2, Trash2, X, Upload, Search, RefreshCw } from 'lucide-react';
+import { Download, Plus, Edit2, Trash2, X, Upload, Search, RefreshCw, ChevronDown, ChevronUp, Calendar, AlertTriangle, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
@@ -18,6 +18,86 @@ const RAZER = {
   white: '#ffffff'
 };
 
+
+// ── Campaign Date Utilities ──────────────────────────────────────────
+// Easter: Anonymous Gregorian algorithm
+const getEasterDate = (year) => {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month, day);
+};
+
+// Nth weekday of a month (e.g., 3rd Sunday of June)
+// weekday: 0=Sun, 1=Mon...6=Sat
+const getNthWeekday = (year, month, weekday, n) => {
+  const first = new Date(year, month, 1);
+  let day = 1 + ((weekday - first.getDay() + 7) % 7);
+  day += (n - 1) * 7;
+  return new Date(year, month, day);
+};
+
+// Black Friday = 4th Thursday of November + includes weekend
+const getBlackFriday = (year) => getNthWeekday(year, 10, 4, 4);
+
+// Fixed campaigns with auto-calculated dates
+// type: 'fixed' = exact date every year, 'formula' = calculated, 'variable' = no fixed date (user sets manually)
+const DEFAULT_CAMPAIGNS = [
+  { name: 'CES', type: 'variable', typicalMonth: 0, typicalDay: 7, notes: 'Research Gamer category. Usually early January.' },
+  { name: 'Valentines Campaign', type: 'fixed', month: 1, day: 14, notes: 'Research Gamer category' },
+  { name: 'Tax Time Campaign', type: 'fixed', month: 3, day: 15, notes: 'Research Gamer category. US Tax Day.' },
+  { name: 'April Fools', type: 'fixed', month: 3, day: 1, notes: 'Research Gamer category' },
+  { name: 'Easter Campaign', type: 'formula', formula: 'easter', notes: 'Research Gamer category. Date varies by year.' },
+  { name: 'Gamer Week', type: 'variable', typicalMonth: 5, typicalDay: 1, notes: 'Research Gamer category. Razer-specific, date varies.' },
+  { name: 'PAX East', type: 'variable', typicalMonth: 2, typicalDay: 20, notes: 'Research Gamer category. Usually late March.' },
+  { name: 'PAX West', type: 'variable', typicalMonth: 7, typicalDay: 29, notes: 'Research Gamer category. Usually late Aug / early Sep.' },
+  { name: "Father's Day", type: 'formula', formula: 'fathers_day', notes: 'Research Gamer category. 3rd Sunday of June (US).' },
+  { name: 'International Left Handed Day', type: 'fixed', month: 7, day: 13, notes: 'Research Gamer category' },
+  { name: 'Intel Gamer Day', type: 'variable', typicalMonth: 7, typicalDay: 1, notes: 'Research Gamer category. Date varies.' },
+  { name: 'Labor Day', type: 'formula', formula: 'labor_day', notes: 'Research Gamer category. 1st Monday of September (US).' },
+  { name: 'Fall Special', type: 'variable', typicalMonth: 9, typicalDay: 1, notes: 'Research Gamer category. Date varies.' },
+  { name: 'Halloween', type: 'fixed', month: 9, day: 31, notes: 'Research Gamer category' },
+  { name: 'Advent Calendar', type: 'fixed', month: 11, day: 1, notes: '1st Dec every year' },
+  { name: 'Christmas & HGG', type: 'fixed', month: 11, day: 1, notes: 'Holiday Gift Guide. 1st Dec every year.' },
+  { name: 'BFCW', type: 'formula', formula: 'black_friday', notes: 'Black Friday Cyber Weekend' },
+];
+
+// Calculate the actual date for a campaign in a given year
+const getCampaignDate = (campaign, year) => {
+  if (campaign.dateOverride) return new Date(campaign.dateOverride);
+  if (campaign.type === 'fixed') return new Date(year, campaign.month, campaign.day);
+  if (campaign.type === 'formula') {
+    switch (campaign.formula) {
+      case 'easter': return getEasterDate(year);
+      case 'fathers_day': return getNthWeekday(year, 5, 0, 3);
+      case 'labor_day': return getNthWeekday(year, 8, 1, 1);
+      case 'black_friday': return getBlackFriday(year);
+      default: return null;
+    }
+  }
+  if (campaign.type === 'variable') {
+    return campaign.typicalMonth !== undefined ? new Date(year, campaign.typicalMonth, campaign.typicalDay || 1) : null;
+  }
+  return null;
+};
+
+const getDaysUntil = (targetDate) => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const target = new Date(targetDate);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+};
+
+const formatCampaignDate = (date) => {
+  if (!date) return 'TBD';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 export default function RazerBannerTool() {
   const [banners, setBanners] = useState([]);
@@ -41,7 +121,14 @@ export default function RazerBannerTool() {
   const [toastMessage, setToastMessage] = useState('');
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [modals, setModals] = useState({ addBanner: false, findReplace: false, duplicate: false, editBanner: null, saveTab: false, confirmDelete: null, newArrangement: false, deleteTab: false, renameTab: false });
+  const [modals, setModals] = useState({ addBanner: false, findReplace: false, duplicate: false, editBanner: null, saveTab: false, confirmDelete: null, newArrangement: false, deleteTab: false, renameTab: false, addCampaign: false });
+
+  // Campaign Tracker state
+  const [campaigns, setCampaigns] = useState(() => {
+    // Initialize with default campaigns, all active for current year
+    return DEFAULT_CAMPAIGNS.map(c => ({ ...c, active: true, id: c.name }));
+  });
+  const [campaignPanelOpen, setCampaignPanelOpen] = useState(false);
 
   // Guard: prevent save effect from overwriting localStorage before load completes
   const hasLoaded = useRef(false);
@@ -80,6 +167,7 @@ export default function RazerBannerTool() {
         if (data.currentTabName) setCurrentTabName(data.currentTabName);
         if (data.tabBaselines) setTabBaselines(data.tabBaselines);
         if (data.isEditingWorking) setIsEditingWorking(data.isEditingWorking);
+        if (data.campaigns && Array.isArray(data.campaigns)) setCampaigns(data.campaigns);
       } catch (e) { console.error('Load failed', e); }
     }
     // Mark load as complete — save effect can now write safely
@@ -102,7 +190,8 @@ export default function RazerBannerTool() {
         goLiveDates,
         currentTabName,
         tabBaselines,
-        isEditingWorking
+        isEditingWorking,
+        campaigns
       }));
     } catch (e) {
       console.error('Save to localStorage failed:', e);
@@ -111,7 +200,7 @@ export default function RazerBannerTool() {
         showToast('⚠️ Storage full! Export your data to avoid losing work.');
       }
     }
-  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName, tabBaselines, isEditingWorking]);
+  }, [arrangements, banners, baseline, baselineSnapshot, currentWork, importedHighlights, goLiveDates, currentTabName, tabBaselines, isEditingWorking, campaigns]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -802,6 +891,56 @@ export default function RazerBannerTool() {
     showToast(`✅ Renamed to "${newName}"`);
   };
 
+  // ── Campaign Management ──────────────────────────────────────────
+  const currentYear = new Date().getFullYear();
+
+  const toggleCampaignActive = (id) => {
+    setCampaigns(prev => prev.map(c => c.id === id ? { ...c, active: !c.active } : c));
+  };
+
+  const deleteCampaign = (id) => {
+    setCampaigns(prev => prev.filter(c => c.id !== id));
+    showToast('🗑️ Campaign removed');
+  };
+
+  const addCampaign = (name, date, notes) => {
+    const newCampaign = {
+      id: `custom_${Date.now()}`,
+      name,
+      type: 'custom',
+      dateOverride: date || null,
+      notes: notes || '',
+      active: true
+    };
+    setCampaigns(prev => [...prev, newCampaign]);
+    setModals(prev => ({ ...prev, addCampaign: false }));
+    showToast(`✅ Added: ${name}`);
+  };
+
+  const updateCampaignDate = (id, newDate) => {
+    setCampaigns(prev => prev.map(c => c.id === id ? { ...c, dateOverride: newDate || null } : c));
+  };
+
+  // Build sorted campaign list with calculated dates
+  const campaignsWithDates = campaigns
+    .filter(c => c.active)
+    .map(c => {
+      const date = getCampaignDate(c, currentYear);
+      const daysUntil = date ? getDaysUntil(date) : null;
+      return { ...c, date, daysUntil };
+    })
+    .sort((a, b) => {
+      if (a.date === null && b.date === null) return 0;
+      if (a.date === null) return 1;
+      if (b.date === null) return -1;
+      return a.date - b.date;
+    });
+
+  // Upcoming = within 7 days AND not past
+  const urgentCampaigns = campaignsWithDates.filter(c => c.daysUntil !== null && c.daysUntil >= 0 && c.daysUntil <= 7);
+  // Next upcoming (for slim bar fallback when nothing is within 7 days)
+  const nextUpcoming = campaignsWithDates.find(c => c.daysUntil !== null && c.daysUntil > 0);
+
   const exportExcel = async () => {
     try {
       const workbook = new ExcelJS.Workbook();
@@ -1303,6 +1442,187 @@ export default function RazerBannerTool() {
           </button>
         </div>
 
+        {/* Campaign Tracker Bar */}
+        <div style={{
+          backgroundColor: urgentCampaigns.length > 0 ? '#fef3c7' : 'white',
+          borderRadius: 8,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          marginBottom: 20,
+          border: urgentCampaigns.length > 0 ? '1px solid #f59e0b' : '1px solid #e2e8f0',
+          overflow: 'hidden'
+        }}>
+          {/* Slim Bar — always visible */}
+          <div
+            onClick={() => setCampaignPanelOpen(prev => !prev)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 20px', cursor: 'pointer', userSelect: 'none'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Calendar size={16} color={urgentCampaigns.length > 0 ? '#d97706' : '#6b7280'} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: RAZER.black }}>Campaigns</span>
+              </div>
+              {urgentCampaigns.length > 0 ? (
+                urgentCampaigns.map(c => (
+                  <div key={c.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    backgroundColor: c.daysUntil <= 3 ? '#fecaca' : '#fef08a',
+                    padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
+                    color: c.daysUntil <= 3 ? '#991b1b' : '#92400e'
+                  }}>
+                    <AlertTriangle size={12} />
+                    {c.name} — {c.daysUntil === 0 ? 'TODAY' : c.daysUntil === 1 ? 'Tomorrow' : `${c.daysUntil}d`}
+                  </div>
+                ))
+              ) : (
+                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                  {nextUpcoming
+                    ? `Next: ${nextUpcoming.name} (${formatCampaignDate(nextUpcoming.date)}, ${nextUpcoming.daysUntil}d away)`
+                    : 'No upcoming campaigns'}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#9ca3af' }}>{campaigns.filter(c => c.active).length} active</span>
+              {campaignPanelOpen ? <ChevronUp size={16} color="#6b7280" /> : <ChevronDown size={16} color="#6b7280" />}
+            </div>
+          </div>
+
+          {/* Expanded Panel */}
+          {campaignPanelOpen && (
+            <div style={{ borderTop: '1px solid #e2e8f0', padding: '16px 20px' }}>
+              {/* Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: RAZER.black }}>
+                  {currentYear} Campaign Calendar
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setModals(prev => ({ ...prev, addCampaign: true })); }}
+                    style={{
+                      backgroundColor: RAZER.green, color: 'white', border: 'none', borderRadius: 4,
+                      padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 4
+                    }}
+                  >
+                    <Plus size={12} /> Add Campaign
+                  </button>
+                </div>
+              </div>
+
+              {/* Campaign List */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                {campaignsWithDates.map(c => {
+                  const isPast = c.daysUntil !== null && c.daysUntil < 0;
+                  const isUrgent = c.daysUntil !== null && c.daysUntil >= 0 && c.daysUntil <= 7;
+                  const isVariable = c.type === 'variable';
+                  return (
+                    <div key={c.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 12px', borderRadius: 6, fontSize: 13,
+                      backgroundColor: isPast ? '#f9fafb' : isUrgent ? '#fef3c7' : '#ffffff',
+                      border: `1px solid ${isPast ? '#e5e7eb' : isUrgent ? '#f59e0b' : '#e5e7eb'}`,
+                      opacity: isPast ? 0.5 : 1
+                    }}>
+                      {/* Date badge */}
+                      <div style={{
+                        minWidth: 54, textAlign: 'center', padding: '4px 6px', borderRadius: 4,
+                        backgroundColor: isPast ? '#e5e7eb' : isUrgent ? '#dc2626' : '#f1f5f9',
+                        color: isPast ? '#9ca3af' : isUrgent ? 'white' : '#374151',
+                        fontSize: 11, fontWeight: 700, lineHeight: 1.3
+                      }}>
+                        {c.date ? (
+                          <>
+                            <div>{c.date.toLocaleDateString('en-US', { month: 'short' })}</div>
+                            <div style={{ fontSize: 14 }}>{c.date.getDate()}</div>
+                          </>
+                        ) : <div>TBD</div>}
+                      </div>
+
+                      {/* Campaign info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: RAZER.black, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {c.name}
+                          {isVariable && !c.dateOverride && (
+                            <span style={{ fontSize: 9, backgroundColor: '#dbeafe', color: '#1e40af', padding: '1px 4px', borderRadius: 3, fontWeight: 500 }}>date varies</span>
+                          )}
+                        </div>
+                        {c.notes && <div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.notes}</div>}
+                      </div>
+
+                      {/* Days countdown */}
+                      <div style={{ fontSize: 11, fontWeight: 600, color: isPast ? '#9ca3af' : isUrgent ? '#dc2626' : '#6b7280', whiteSpace: 'nowrap' }}>
+                        {c.daysUntil === null ? '' : c.daysUntil === 0 ? 'TODAY' : c.daysUntil < 0 ? `${Math.abs(c.daysUntil)}d ago` : `${c.daysUntil}d`}
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 2 }}>
+                        {/* Edit date (for variable/custom campaigns) */}
+                        {(c.type === 'variable' || c.type === 'custom') && (
+                          <input
+                            type="date"
+                            value={c.dateOverride || ''}
+                            onChange={(e) => updateCampaignDate(c.id, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Set date"
+                            style={{
+                              width: 20, height: 20, opacity: 0.5, cursor: 'pointer',
+                              border: 'none', padding: 0, backgroundColor: 'transparent'
+                            }}
+                          />
+                        )}
+                        {/* Toggle active */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleCampaignActive(c.id); }}
+                          title={c.active ? 'Skip this year' : 'Activate'}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: 2,
+                            color: '#9ca3af', fontSize: 14
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Show inactive campaigns */}
+                {campaigns.filter(c => !c.active).length > 0 && (
+                  <div style={{ gridColumn: '1 / -1', borderTop: '1px dashed #d1d5db', paddingTop: 8, marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6, fontWeight: 600 }}>
+                      Skipped this year ({campaigns.filter(c => !c.active).length})
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {campaigns.filter(c => !c.active).map(c => (
+                        <div key={c.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          padding: '3px 8px', borderRadius: 4, fontSize: 11,
+                          backgroundColor: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb'
+                        }}>
+                          {c.name}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleCampaignActive(c.id); }}
+                            title="Re-activate"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: RAZER.green, fontWeight: 700, fontSize: 11 }}
+                          >+</button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteCampaign(c.id); }}
+                            title="Delete permanently"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#dc2626', fontWeight: 700, fontSize: 11 }}
+                          >×</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Main Content */}
         <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20 }}>
           {/* Left Panel - Banners */}
@@ -1660,7 +1980,8 @@ export default function RazerBannerTool() {
       {modals.newArrangement && <NewArrangementModal tabs={Object.keys(arrangements)} onCreate={createNewArrangement} onClose={() => setModals(prev => ({ ...prev, newArrangement: false }))} />}
       {modals.deleteTab && <DeleteTabModal tabs={Object.keys(arrangements)} currentTab={currentTabName} onDelete={deleteTab} onClose={() => setModals(prev => ({ ...prev, deleteTab: false }))} />}
       {modals.renameTab && <RenameTabModal currentName={currentTabName || sortedDates[0]} onRename={renameTab} onClose={() => setModals(prev => ({ ...prev, renameTab: false }))} />}
-      
+      {modals.addCampaign && <AddCampaignModal onSave={addCampaign} onClose={() => setModals(prev => ({ ...prev, addCampaign: false }))} />}
+
       {/* Confirm Delete Modal */}
       {modals.confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
@@ -1978,6 +2299,36 @@ function RenameTabModal({ currentName, onRename, onClose }) {
           >
             Rename
           </button>
+          <button onClick={onClose} style={btnSecondary}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddCampaignModal({ onSave, onClose }) {
+  const [name, setName] = useState('');
+  const [date, setDate] = useState('');
+  const [notes, setNotes] = useState('');
+  return (
+    <div style={modalOverlay}>
+      <div style={modalBox}>
+        <h2 style={modalTitle}>Add Campaign</h2>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 13 }}>Campaign Name</label>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} placeholder="e.g. RazerCon 2026" autoFocus />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 13 }}>Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+          <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>Leave empty if date is TBD</p>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 13 }}>Notes (optional)</label>
+          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} style={inputStyle} placeholder="e.g. Check with Product team for assets" />
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button onClick={() => { if (!name.trim()) return alert('Enter campaign name'); onSave(name.trim(), date || null, notes.trim()); }} style={btnPrimary}>Add Campaign</button>
           <button onClick={onClose} style={btnSecondary}>Cancel</button>
         </div>
       </div>
