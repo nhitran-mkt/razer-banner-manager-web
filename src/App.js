@@ -1444,11 +1444,12 @@ export default function RazerBannerTool() {
 
         {/* Campaign Tracker Bar */}
         <div style={{
-          backgroundColor: urgentCampaigns.length > 0 ? '#1a1a1a' : 'white',
+          backgroundColor: 'white',
           borderRadius: 8,
           boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
           marginBottom: 20,
-          border: urgentCampaigns.length > 0 ? `1px solid ${RAZER.green}` : '1px solid #e2e8f0',
+          border: '1px solid #e2e8f0',
+          borderLeft: urgentCampaigns.length > 0 ? '4px solid #e67e22' : '4px solid #e2e8f0',
           overflow: 'hidden'
         }}>
           {/* Slim Bar — always visible */}
@@ -1461,15 +1462,15 @@ export default function RazerBannerTool() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Calendar size={16} color={urgentCampaigns.length > 0 ? RAZER.green : '#6b7280'} />
-                <span style={{ fontWeight: 700, fontSize: 13, color: urgentCampaigns.length > 0 ? '#ffffff' : RAZER.black }}>Campaigns</span>
+                <Calendar size={16} color={urgentCampaigns.length > 0 ? '#e67e22' : '#6b7280'} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: RAZER.black }}>Campaigns</span>
               </div>
               {urgentCampaigns.length > 0 ? (
                 urgentCampaigns.map(c => (
                   <div key={c.id} style={{
                     display: 'flex', alignItems: 'center', gap: 4,
-                    backgroundColor: c.daysUntil <= 3 ? '#dc2626' : RAZER.green,
-                    padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
+                    backgroundColor: c.daysUntil <= 3 ? '#e67e22' : '#f39c12',
+                    padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 700,
                     color: '#ffffff'
                   }}>
                     <AlertTriangle size={12} />
@@ -1485,19 +1486,19 @@ export default function RazerBannerTool() {
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: urgentCampaigns.length > 0 ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
+              <span style={{ fontSize: 11, color: '#9ca3af' }}>
                 {campaignsWithDates.filter(c => c.daysUntil === null || c.daysUntil >= 0).length} upcoming
               </span>
               {campaignPanelOpen
-                ? <ChevronUp size={16} color={urgentCampaigns.length > 0 ? '#ffffff' : '#6b7280'} />
-                : <ChevronDown size={16} color={urgentCampaigns.length > 0 ? '#ffffff' : '#6b7280'} />}
+                ? <ChevronUp size={16} color="#6b7280" />
+                : <ChevronDown size={16} color="#6b7280" />}
             </div>
           </div>
 
           {/* Expanded Panel */}
           {campaignPanelOpen && (
             <div style={{
-              borderTop: urgentCampaigns.length > 0 ? '1px solid #333' : '1px solid #e2e8f0',
+              borderTop: '1px solid #e2e8f0',
               padding: '16px 20px',
               backgroundColor: 'white'
             }}>
