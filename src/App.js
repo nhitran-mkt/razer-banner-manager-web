@@ -48,23 +48,24 @@ const getBlackFriday = (year) => getNthWeekday(year, 10, 4, 4);
 // Fixed campaigns with auto-calculated dates
 // type: 'fixed' = exact date every year, 'formula' = calculated, 'variable' = no fixed date (user sets manually)
 const DEFAULT_CAMPAIGNS = [
-  { name: 'CES', type: 'variable', typicalMonth: 0, typicalDay: 7, notes: 'Research Gamer category. Usually early January.' },
-  { name: 'Valentines Campaign', type: 'fixed', month: 1, day: 14, notes: 'Research Gamer category' },
-  { name: 'Tax Time Campaign', type: 'fixed', month: 3, day: 15, notes: 'Research Gamer category. US Tax Day.' },
-  { name: 'April Fools', type: 'fixed', month: 3, day: 1, notes: 'Research Gamer category' },
-  { name: 'Easter Campaign', type: 'formula', formula: 'easter', notes: 'Research Gamer category. Date varies by year.' },
-  { name: 'Gamer Week', type: 'variable', typicalMonth: 5, typicalDay: 1, notes: 'Research Gamer category. Razer-specific, date varies.' },
-  { name: 'PAX East', type: 'variable', typicalMonth: 2, typicalDay: 20, notes: 'Research Gamer category. Usually late March.' },
-  { name: 'PAX West', type: 'variable', typicalMonth: 7, typicalDay: 29, notes: 'Research Gamer category. Usually late Aug / early Sep.' },
-  { name: "Father's Day", type: 'formula', formula: 'fathers_day', notes: 'Research Gamer category. 3rd Sunday of June (US).' },
-  { name: 'International Left Handed Day', type: 'fixed', month: 7, day: 13, notes: 'Research Gamer category' },
-  { name: 'Intel Gamer Day', type: 'variable', typicalMonth: 7, typicalDay: 1, notes: 'Research Gamer category. Date varies.' },
-  { name: 'Labor Day', type: 'formula', formula: 'labor_day', notes: 'Research Gamer category. 1st Monday of September (US).' },
-  { name: 'Fall Special', type: 'variable', typicalMonth: 9, typicalDay: 1, notes: 'Research Gamer category. Date varies.' },
-  { name: 'Halloween', type: 'fixed', month: 9, day: 31, notes: 'Research Gamer category' },
-  { name: 'Advent Calendar', type: 'fixed', month: 11, day: 1, notes: '1st Dec every year' },
-  { name: 'Christmas & HGG', type: 'fixed', month: 11, day: 1, notes: 'Holiday Gift Guide. 1st Dec every year.' },
-  { name: 'BFCW', type: 'formula', formula: 'black_friday', notes: 'Black Friday Cyber Weekend' },
+  { name: 'CES', type: 'variable', typicalMonth: 0, typicalDay: 6, notes: '' },
+  { name: 'Valentines Campaign', type: 'fixed', month: 1, day: 14, notes: '' },
+  { name: 'Tax Time Campaign', type: 'fixed', month: 3, day: 15, notes: '' },
+  { name: 'April Fools', type: 'fixed', month: 3, day: 1, notes: '' },
+  { name: 'Easter Campaign', type: 'formula', formula: 'easter', notes: '' },
+  { name: 'Gamer Week', type: 'variable', typicalMonth: 5, typicalDay: 1, notes: '' },
+  { name: 'PAX East', type: 'variable', typicalMonth: 2, typicalDay: 26, notes: '' },
+  { name: 'PAX West', type: 'variable', typicalMonth: 8, typicalDay: 4, notes: '' },
+  { name: "Father's Day", type: 'formula', formula: 'fathers_day', notes: '' },
+  { name: 'International Left Handed Day', type: 'fixed', month: 7, day: 13, notes: '' },
+  { name: 'Intel Gamer Day', type: 'variable', typicalMonth: 7, typicalDay: 1, notes: '' },
+  { name: 'Labor Day', type: 'formula', formula: 'labor_day', notes: '' },
+  { name: 'Fall Special', type: 'variable', typicalMonth: 9, typicalDay: 1, notes: '' },
+  { name: 'Halloween', type: 'fixed', month: 9, day: 31, notes: '' },
+  { name: 'Advent Calendar', type: 'fixed', month: 11, day: 1, notes: '' },
+  { name: 'HGG', type: 'fixed', month: 11, day: 1, notes: '' },
+  { name: 'Christmas', type: 'variable', typicalMonth: 11, typicalDay: 25, notes: '' },
+  { name: 'BFCW', type: 'formula', formula: 'black_friday', notes: '' },
 ];
 
 // Calculate the actual date for a campaign in a given year
@@ -1448,8 +1449,7 @@ export default function RazerBannerTool() {
           borderRadius: 8,
           boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
           marginBottom: 20,
-          border: '1px solid #e2e8f0',
-          borderLeft: urgentCampaigns.length > 0 ? '4px solid #e67e22' : '4px solid #e2e8f0',
+          border: `2px solid ${RAZER.green}`,
           overflow: 'hidden'
         }}>
           {/* Slim Bar — always visible */}
@@ -1533,13 +1533,13 @@ export default function RazerBannerTool() {
                     <div key={c.id} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '8px 12px', borderRadius: 6, fontSize: 13,
-                      backgroundColor: isUrgent ? '#f0fdf4' : '#ffffff',
-                      border: `1px solid ${isUrgent ? RAZER.green : '#e5e7eb'}`
+                      backgroundColor: isUrgent ? '#fef7f0' : '#ffffff',
+                      border: `1px solid ${isUrgent ? '#e67e22' : '#e5e7eb'}`
                     }}>
                       {/* Date badge */}
                       <div style={{
                         minWidth: 54, textAlign: 'center', padding: '4px 6px', borderRadius: 4,
-                        backgroundColor: isUrgent ? RAZER.green : '#f1f5f9',
+                        backgroundColor: isUrgent ? '#e67e22' : '#f1f5f9',
                         color: isUrgent ? 'white' : '#374151',
                         fontSize: 11, fontWeight: 700, lineHeight: 1.3
                       }}>
@@ -1562,11 +1562,10 @@ export default function RazerBannerTool() {
                             <span style={{ fontSize: 9, backgroundColor: '#d1fae5', color: '#065f46', padding: '1px 4px', borderRadius: 3, fontWeight: 500 }}>confirmed</span>
                           )}
                         </div>
-                        {c.notes && <div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.notes}</div>}
                       </div>
 
                       {/* Days countdown */}
-                      <div style={{ fontSize: 11, fontWeight: 600, color: isUrgent ? RAZER.green : '#6b7280', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: isUrgent ? '#e67e22' : '#6b7280', whiteSpace: 'nowrap' }}>
                         {c.daysUntil === null ? '' : c.daysUntil === 0 ? 'TODAY' : `${c.daysUntil}d`}
                       </div>
 
@@ -1750,7 +1749,7 @@ export default function RazerBannerTool() {
               borderBottom: `2px solid ${RAZER.green}`,
               borderRadius: '6px 6px 0 0',
               position: 'relative',
-              zIndex: 100
+              zIndex: 10
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: RAZER.black, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
