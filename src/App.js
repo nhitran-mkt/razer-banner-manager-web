@@ -1444,11 +1444,11 @@ export default function RazerBannerTool() {
 
         {/* Campaign Tracker Bar */}
         <div style={{
-          backgroundColor: urgentCampaigns.length > 0 ? '#fef3c7' : 'white',
+          backgroundColor: urgentCampaigns.length > 0 ? '#1a1a1a' : 'white',
           borderRadius: 8,
           boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
           marginBottom: 20,
-          border: urgentCampaigns.length > 0 ? '1px solid #f59e0b' : '1px solid #e2e8f0',
+          border: urgentCampaigns.length > 0 ? `1px solid ${RAZER.green}` : '1px solid #e2e8f0',
           overflow: 'hidden'
         }}>
           {/* Slim Bar — always visible */}
@@ -1461,16 +1461,16 @@ export default function RazerBannerTool() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Calendar size={16} color={urgentCampaigns.length > 0 ? '#d97706' : '#6b7280'} />
-                <span style={{ fontWeight: 700, fontSize: 13, color: RAZER.black }}>Campaigns</span>
+                <Calendar size={16} color={urgentCampaigns.length > 0 ? RAZER.green : '#6b7280'} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: urgentCampaigns.length > 0 ? '#ffffff' : RAZER.black }}>Campaigns</span>
               </div>
               {urgentCampaigns.length > 0 ? (
                 urgentCampaigns.map(c => (
                   <div key={c.id} style={{
                     display: 'flex', alignItems: 'center', gap: 4,
-                    backgroundColor: c.daysUntil <= 3 ? '#fecaca' : '#fef08a',
+                    backgroundColor: c.daysUntil <= 3 ? '#dc2626' : RAZER.green,
                     padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
-                    color: c.daysUntil <= 3 ? '#991b1b' : '#92400e'
+                    color: '#ffffff'
                   }}>
                     <AlertTriangle size={12} />
                     {c.name} — {c.daysUntil === 0 ? 'TODAY' : c.daysUntil === 1 ? 'Tomorrow' : `${c.daysUntil}d`}
@@ -1485,14 +1485,22 @@ export default function RazerBannerTool() {
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: '#9ca3af' }}>{campaigns.filter(c => c.active).length} active</span>
-              {campaignPanelOpen ? <ChevronUp size={16} color="#6b7280" /> : <ChevronDown size={16} color="#6b7280" />}
+              <span style={{ fontSize: 11, color: urgentCampaigns.length > 0 ? 'rgba(255,255,255,0.5)' : '#9ca3af' }}>
+                {campaignsWithDates.filter(c => c.daysUntil === null || c.daysUntil >= 0).length} upcoming
+              </span>
+              {campaignPanelOpen
+                ? <ChevronUp size={16} color={urgentCampaigns.length > 0 ? '#ffffff' : '#6b7280'} />
+                : <ChevronDown size={16} color={urgentCampaigns.length > 0 ? '#ffffff' : '#6b7280'} />}
             </div>
           </div>
 
           {/* Expanded Panel */}
           {campaignPanelOpen && (
-            <div style={{ borderTop: '1px solid #e2e8f0', padding: '16px 20px' }}>
+            <div style={{
+              borderTop: urgentCampaigns.length > 0 ? '1px solid #333' : '1px solid #e2e8f0',
+              padding: '16px 20px',
+              backgroundColor: 'white'
+            }}>
               {/* Controls */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: RAZER.black }}>
@@ -1512,25 +1520,26 @@ export default function RazerBannerTool() {
                 </div>
               </div>
 
-              {/* Campaign List */}
+              {/* Campaign List — only future + today, hide past */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
-                {campaignsWithDates.map(c => {
-                  const isPast = c.daysUntil !== null && c.daysUntil < 0;
+                {campaignsWithDates
+                  .filter(c => c.daysUntil === null || c.daysUntil >= 0)
+                  .map(c => {
                   const isUrgent = c.daysUntil !== null && c.daysUntil >= 0 && c.daysUntil <= 7;
-                  const isVariable = c.type === 'variable';
+                  const isVariable = c.type === 'variable' || c.type === 'custom';
+                  const needsDateConfirm = c.type === 'variable' && !c.dateOverride;
                   return (
                     <div key={c.id} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '8px 12px', borderRadius: 6, fontSize: 13,
-                      backgroundColor: isPast ? '#f9fafb' : isUrgent ? '#fef3c7' : '#ffffff',
-                      border: `1px solid ${isPast ? '#e5e7eb' : isUrgent ? '#f59e0b' : '#e5e7eb'}`,
-                      opacity: isPast ? 0.5 : 1
+                      backgroundColor: isUrgent ? '#f0fdf4' : '#ffffff',
+                      border: `1px solid ${isUrgent ? RAZER.green : '#e5e7eb'}`
                     }}>
                       {/* Date badge */}
                       <div style={{
                         minWidth: 54, textAlign: 'center', padding: '4px 6px', borderRadius: 4,
-                        backgroundColor: isPast ? '#e5e7eb' : isUrgent ? '#dc2626' : '#f1f5f9',
-                        color: isPast ? '#9ca3af' : isUrgent ? 'white' : '#374151',
+                        backgroundColor: isUrgent ? RAZER.green : '#f1f5f9',
+                        color: isUrgent ? 'white' : '#374151',
                         fontSize: 11, fontWeight: 700, lineHeight: 1.3
                       }}>
                         {c.date ? (
@@ -1545,41 +1554,50 @@ export default function RazerBannerTool() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, color: RAZER.black, display: 'flex', alignItems: 'center', gap: 4 }}>
                           {c.name}
-                          {isVariable && !c.dateOverride && (
-                            <span style={{ fontSize: 9, backgroundColor: '#dbeafe', color: '#1e40af', padding: '1px 4px', borderRadius: 3, fontWeight: 500 }}>date varies</span>
+                          {needsDateConfirm && (
+                            <span style={{ fontSize: 9, backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 4px', borderRadius: 3, fontWeight: 500 }}>date varies</span>
+                          )}
+                          {c.dateOverride && c.type === 'variable' && (
+                            <span style={{ fontSize: 9, backgroundColor: '#d1fae5', color: '#065f46', padding: '1px 4px', borderRadius: 3, fontWeight: 500 }}>confirmed</span>
                           )}
                         </div>
                         {c.notes && <div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.notes}</div>}
                       </div>
 
                       {/* Days countdown */}
-                      <div style={{ fontSize: 11, fontWeight: 600, color: isPast ? '#9ca3af' : isUrgent ? '#dc2626' : '#6b7280', whiteSpace: 'nowrap' }}>
-                        {c.daysUntil === null ? '' : c.daysUntil === 0 ? 'TODAY' : c.daysUntil < 0 ? `${Math.abs(c.daysUntil)}d ago` : `${c.daysUntil}d`}
+                      <div style={{ fontSize: 11, fontWeight: 600, color: isUrgent ? RAZER.green : '#6b7280', whiteSpace: 'nowrap' }}>
+                        {c.daysUntil === null ? '' : c.daysUntil === 0 ? 'TODAY' : `${c.daysUntil}d`}
                       </div>
 
                       {/* Actions */}
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        {/* Edit date (for variable/custom campaigns) */}
-                        {(c.type === 'variable' || c.type === 'custom') && (
-                          <input
-                            type="date"
-                            value={c.dateOverride || ''}
-                            onChange={(e) => updateCampaignDate(c.id, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            title="Set date"
-                            style={{
-                              width: 20, height: 20, opacity: 0.5, cursor: 'pointer',
-                              border: 'none', padding: 0, backgroundColor: 'transparent'
-                            }}
-                          />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {/* Date picker — visible for variable/custom campaigns */}
+                        {isVariable && (
+                          <label
+                            title="Edit date"
+                            style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          >
+                            <Edit2 size={13} color="#6b7280" style={{ pointerEvents: 'none' }} />
+                            <input
+                              type="date"
+                              value={c.dateOverride || ''}
+                              onChange={(e) => { e.stopPropagation(); updateCampaignDate(c.id, e.target.value); }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: 'absolute', top: 0, left: 0,
+                                width: '100%', height: '100%',
+                                opacity: 0, cursor: 'pointer'
+                              }}
+                            />
+                          </label>
                         )}
-                        {/* Toggle active */}
+                        {/* Skip this year */}
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleCampaignActive(c.id); }}
-                          title={c.active ? 'Skip this year' : 'Activate'}
+                          title="Skip this year"
                           style={{
                             background: 'none', border: 'none', cursor: 'pointer', padding: 2,
-                            color: '#9ca3af', fontSize: 14
+                            color: '#d1d5db'
                           }}
                         >
                           <X size={14} />
@@ -1589,7 +1607,7 @@ export default function RazerBannerTool() {
                   );
                 })}
 
-                {/* Show inactive campaigns */}
+                {/* Show inactive/skipped campaigns */}
                 {campaigns.filter(c => !c.active).length > 0 && (
                   <div style={{ gridColumn: '1 / -1', borderTop: '1px dashed #d1d5db', paddingTop: 8, marginTop: 4 }}>
                     <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6, fontWeight: 600 }}>
